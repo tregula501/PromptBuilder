@@ -12,6 +12,8 @@ from app.ui.styles import (
     get_theme_colors, get_button_style
 )
 from app.ui.tabs.sports_selection import SportsSelectionTab
+from app.ui.tabs.game_selection import GameSelectionTab
+from app.ui.tabs.odds_review import OddsReviewTab
 from app.ui.tabs.bet_configuration import BetConfigurationTab
 from app.ui.tabs.prompt_preview import PromptPreviewTab
 from app.core.prompt_builder import get_prompt_builder
@@ -85,11 +87,11 @@ class PromptBuilderApp(ctk.CTk):
         # Navigation buttons
         self.nav_buttons = {}
         nav_items = [
-            ("Sports", "📊"),
+            ("Sports", "🏈"),
+            ("Games", "📋"),
+            ("Odds", "💰"),
             ("Bet Config", "⚙️"),
-            ("Data Sources", "📡"),
             ("Preview", "👁️"),
-            ("Settings", "🔧")
         ]
 
         for idx, (label, icon) in enumerate(nav_items, start=2):
@@ -204,39 +206,29 @@ class PromptBuilderApp(ctk.CTk):
             fg_color=colors["bg_primary"]
         )
 
+        # Game Selection Tab (NEW)
+        self.tabs["Games"] = GameSelectionTab(
+            self.content_area,
+            fg_color=colors["bg_primary"]
+        )
+
+        # Odds Review Tab (NEW)
+        self.tabs["Odds"] = OddsReviewTab(
+            self.content_area,
+            fg_color=colors["bg_primary"]
+        )
+
         # Bet Configuration Tab
         self.tabs["Bet Config"] = BetConfigurationTab(
             self.content_area,
             fg_color=colors["bg_primary"]
         )
 
-        # Data Sources Tab (placeholder for now)
-        data_tab = ctk.CTkFrame(self.content_area, corner_radius=0, fg_color=colors["bg_primary"])
-        placeholder = ctk.CTkLabel(
-            data_tab,
-            text="Data Sources Tab\n\nConfigure API keys in Settings",
-            font=FONTS["heading_medium"],
-            text_color=colors["text_secondary"]
-        )
-        placeholder.pack(expand=True)
-        self.tabs["Data Sources"] = data_tab
-
         # Prompt Preview Tab
         self.tabs["Preview"] = PromptPreviewTab(
             self.content_area,
             fg_color=colors["bg_primary"]
         )
-
-        # Settings Tab (placeholder for now)
-        settings_tab = ctk.CTkFrame(self.content_area, corner_radius=0, fg_color=colors["bg_primary"])
-        placeholder = ctk.CTkLabel(
-            settings_tab,
-            text="Settings Tab\n\nEdit .env file for API keys",
-            font=FONTS["heading_medium"],
-            text_color=colors["text_secondary"]
-        )
-        placeholder.pack(expand=True)
-        self.tabs["Settings"] = settings_tab
 
     def _switch_tab(self, tab_name: str):
         """Switch to the specified tab."""
@@ -251,6 +243,16 @@ class PromptBuilderApp(ctk.CTk):
         # Show new tab
         self.tabs[tab_name].grid(row=0, column=0, sticky="nsew")
         self.current_tab = tab_name
+
+        # Special handling for Odds tab - auto-refresh with selected games
+        if tab_name == "Odds":
+            try:
+                games_tab = self.tabs["Games"]
+                selected_games = games_tab.get_selected_games()
+                odds_tab = self.tabs["Odds"]
+                odds_tab.load_games(selected_games)
+            except Exception as e:
+                logger.error(f"Error refreshing Odds tab: {e}")
 
         # Update header
         self.header_title.configure(text=tab_name)
@@ -271,13 +273,21 @@ class PromptBuilderApp(ctk.CTk):
         logger.info("Generate prompt button clicked")
 
         try:
-            # Get selected sports
+            # Get selected games from Games tab
+            games_tab = self.tabs["Games"]
+            selected_games = games_tab.get_selected_games()
+
+            if not selected_games:
+                self._update_status("Please select games first (Games tab)", "error")
+                return
+
+            # Get selected sports (for config)
             sports_tab = self.tabs["Sports"]
             selected_sports = sports_tab.get_selected_sports()
 
             if not selected_sports:
-                self._update_status("Please select at least one sport", "error")
-                return
+                # Infer sports from selected games if not explicitly selected
+                selected_sports = list(set(game.sport for game in selected_games))
 
             # Get bet configuration
             bet_tab = self.tabs["Bet Config"]
@@ -296,9 +306,9 @@ class PromptBuilderApp(ctk.CTk):
                 include_trends=bet_config["include_trends"]
             )
 
-            # Build prompt with example games (no API call for demo)
+            # Build prompt with SELECTED GAMES (not empty list!)
             builder = get_prompt_builder()
-            prompt_data = builder.build_prompt(config, [])  # Empty games list for demo
+            prompt_data = builder.build_prompt(config, selected_games)
 
             # Show in preview tab
             preview_tab = self.tabs["Preview"]
@@ -307,8 +317,8 @@ class PromptBuilderApp(ctk.CTk):
             # Switch to preview tab
             self._switch_tab("Preview")
 
-            self._update_status("Prompt generated!", "success")
-            logger.info("Prompt generated successfully")
+            self._update_status(f"Prompt generated with {len(selected_games)} games!", "success")
+            logger.info(f"Prompt generated successfully with {len(selected_games)} games")
 
         except Exception as e:
             self._update_status(f"Error: {str(e)}", "error")
