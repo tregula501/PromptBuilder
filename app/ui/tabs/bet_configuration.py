@@ -38,6 +38,7 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
 
         self.max_odds_var = ctk.IntVar(value=400)
         self.risk_level_var = ctk.StringVar(value="Medium")
+        self.custom_context_var = ctk.StringVar(value="")
 
         # Include options
         self.include_stats_var = ctk.BooleanVar(value=True)
@@ -81,6 +82,9 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
 
         # Sportsbook Filter Section
         row = self._create_sportsbook_section(row)
+
+        # Custom Context Section
+        row = self._create_custom_context_section(row)
 
         # Save button
         self._create_save_button(row)
@@ -391,6 +395,62 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
 
         return start_row + 1
 
+    def _create_custom_context_section(self, start_row: int) -> int:
+        """Create custom context input section."""
+        frame = ctk.CTkFrame(self, **get_frame_style("card", self.theme))
+        frame.grid(row=start_row, column=0, padx=SPACING["xl"], pady=SPACING["md"], sticky="ew")
+        frame.grid_columnconfigure(0, weight=1)
+
+        # Title
+        title = ctk.CTkLabel(
+            frame,
+            text="Additional Context",
+            font=FONTS["heading_small"],
+            text_color=self.colors["accent"]
+        )
+        title.grid(row=0, column=0, padx=SPACING["lg"], pady=(SPACING["lg"], SPACING["sm"]), sticky="w")
+
+        # Description
+        desc = ctk.CTkLabel(
+            frame,
+            text="Add any additional context, instructions, or preferences for the AI (optional)",
+            font=FONTS["body_small"],
+            text_color=self.colors["text_secondary"]
+        )
+        desc.grid(row=1, column=0, padx=SPACING["lg"], pady=(0, SPACING["md"]), sticky="w")
+
+        # Text box for custom context
+        self.custom_context_textbox = ctk.CTkTextbox(
+            frame,
+            height=100,
+            font=FONTS["body_medium"],
+            fg_color=self.colors["bg_tertiary"],
+            text_color=self.colors["text_primary"],
+            border_color=self.colors["accent"],
+            border_width=1
+        )
+        self.custom_context_textbox.grid(row=2, column=0, padx=SPACING["lg"], pady=(0, SPACING["lg"]), sticky="ew")
+
+        # Placeholder text
+        placeholder = "Example: Focus on underdogs, avoid heavy favorites, prioritize home teams..."
+        self.custom_context_textbox.insert("1.0", placeholder)
+        self.custom_context_textbox.bind("<FocusIn>", lambda e: self._on_context_focus_in(placeholder))
+        self.custom_context_textbox.bind("<FocusOut>", lambda e: self._on_context_focus_out(placeholder))
+
+        return start_row + 1
+
+    def _on_context_focus_in(self, placeholder: str):
+        """Handle focus in on custom context textbox."""
+        if self.custom_context_textbox.get("1.0", "end-1c") == placeholder:
+            self.custom_context_textbox.delete("1.0", "end")
+            self.custom_context_textbox.configure(text_color=self.colors["text_primary"])
+
+    def _on_context_focus_out(self, placeholder: str):
+        """Handle focus out on custom context textbox."""
+        if not self.custom_context_textbox.get("1.0", "end-1c").strip():
+            self.custom_context_textbox.insert("1.0", placeholder)
+            self.custom_context_textbox.configure(text_color=self.colors["text_secondary"])
+
     def _create_save_button(self, start_row: int):
         """Create save configuration button."""
         btn = ctk.CTkButton(
@@ -443,6 +503,8 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
 
     def _save_configuration(self):
         """Save current configuration as default."""
+        custom_context = self._get_custom_context()
+
         self.config.update_settings({
             "max_combined_odds": self.max_odds_var.get(),
             "bet_types": {bt.value: (bt in self.selected_bet_types) for bt in BetType},
@@ -452,9 +514,21 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
             "include_injuries": self.include_injuries_var.get(),
             "include_weather": self.include_weather_var.get(),
             "include_trends": self.include_trends_var.get(),
-            "selected_sportsbooks": list(self.selected_sportsbooks)
+            "selected_sportsbooks": list(self.selected_sportsbooks),
+            "custom_context": custom_context
         })
         logger.info("Saved bet configuration as default")
+
+    def _get_custom_context(self) -> str:
+        """Get custom context text, filtering out placeholder."""
+        text = self.custom_context_textbox.get("1.0", "end-1c").strip()
+        placeholder = "Example: Focus on underdogs, avoid heavy favorites, prioritize home teams..."
+
+        # Return empty string if placeholder or empty
+        if text == placeholder or not text:
+            return ""
+
+        return text
 
     def get_configuration(self) -> dict:
         """Get current bet configuration."""
@@ -467,5 +541,6 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
             "include_injuries": self.include_injuries_var.get(),
             "include_weather": self.include_weather_var.get(),
             "include_trends": self.include_trends_var.get(),
-            "selected_sportsbooks": list(self.selected_sportsbooks)
+            "selected_sportsbooks": list(self.selected_sportsbooks),
+            "custom_context": self._get_custom_context()
         }

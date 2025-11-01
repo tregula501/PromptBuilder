@@ -309,7 +309,8 @@ class PromptBuilderApp(ctk.CTk):
                 include_stats=bet_config["include_stats"],
                 include_injuries=bet_config["include_injuries"],
                 include_weather=bet_config["include_weather"],
-                include_trends=bet_config["include_trends"]
+                include_trends=bet_config["include_trends"],
+                custom_context=bet_config.get("custom_context") or None
             )
 
             # Build prompt with SELECTED GAMES (not empty list!)
