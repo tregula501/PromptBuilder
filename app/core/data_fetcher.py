@@ -14,6 +14,7 @@ from app.core.models import (
     Game, OddsData, TeamStats, SportType, BetType,
     OddsFormat, APIResponse, DataSource
 )
+from app.core.format_adapters import AdapterFactory
 
 logger = logging.getLogger(__name__)
 
@@ -149,75 +150,18 @@ class OddsAPIClient:
         return self._make_request(f"sports/{sport_key}/odds", params)
 
     def parse_odds_to_games(self, odds_response: APIResponse, sport: SportType) -> List[Game]:
-        """Parse API response into Game objects."""
+        """
+        Parse API response into Game objects using the OddsAPIAdapter.
+
+        This method now uses the adapter pattern for better maintainability
+        and consistency across different data sources.
+        """
         if not odds_response.success or not odds_response.data:
             return []
 
-        games = []
-        for event in odds_response.data:
-            try:
-                # Extract teams
-                home_team = event.get("home_team", "Unknown")
-                away_team = event.get("away_team", "Unknown")
-
-                # Parse game time
-                game_time = None
-                if event.get("commence_time"):
-                    game_time = datetime.fromisoformat(
-                        event["commence_time"].replace("Z", "+00:00")
-                    )
-
-                # Extract odds from bookmakers
-                odds_list = []
-                bookmakers = event.get("bookmakers", [])
-
-                for bookmaker in bookmakers:
-                    sportsbook = bookmaker.get("title", "Unknown")
-                    markets = bookmaker.get("markets", [])
-
-                    for market in markets:
-                        market_key = market.get("key")
-                        outcomes = market.get("outcomes", [])
-
-                        # Map market to bet type
-                        bet_type_map = {
-                            "h2h": BetType.MONEYLINE,
-                            "spreads": BetType.SPREAD,
-                            "totals": BetType.TOTALS
-                        }
-                        bet_type = bet_type_map.get(market_key, BetType.MONEYLINE)
-
-                        for outcome in outcomes:
-                            team_name = outcome.get("name")
-                            price = outcome.get("price")
-                            point = outcome.get("point")  # For spreads/totals
-
-                            line = None
-                            if point is not None:
-                                line = str(point)
-
-                            odds_data = OddsData(
-                                sportsbook=sportsbook,
-                                bet_type=bet_type,
-                                odds=str(price) if isinstance(price, (int, float)) else price,
-                                odds_format=OddsFormat.AMERICAN,
-                                line=line
-                            )
-                            odds_list.append(odds_data)
-
-                # Create Game object
-                game = Game(
-                    sport=sport,
-                    home_team=home_team,
-                    away_team=away_team,
-                    game_time=game_time,
-                    odds=odds_list
-                )
-                games.append(game)
-
-            except Exception as e:
-                logger.error(f"Error parsing game data: {e}")
-                continue
+        # Use the OddsAPIAdapter to convert raw data to Game objects
+        adapter = AdapterFactory.get_adapter("odds_api")
+        games = adapter.adapt_to_games(odds_response.data, sport)
 
         logger.info(f"Parsed {len(games)} games for {sport}")
         return games
