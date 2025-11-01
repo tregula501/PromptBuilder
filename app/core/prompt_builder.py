@@ -65,6 +65,9 @@ Please analyze these betting opportunities considering value, risk, and statisti
         # Build additional constraints
         constraints = self._build_constraints(prompt_config)
 
+        # Build contextual factors list
+        contextual_factors = self._build_contextual_factors(prompt_config)
+
         # Format template
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -77,6 +80,7 @@ Please analyze these betting opportunities considering value, risk, and statisti
             game_data=game_data_str,
             odds_data=odds_data_str,
             additional_constraints=constraints,
+            contextual_factors=contextual_factors,
             custom_context=prompt_config.custom_context or "None provided"
         )
 
@@ -235,6 +239,28 @@ Please analyze these betting opportunities considering value, risk, and statisti
             constraints.append("- Use statistical models for predictions")
 
         return "\n".join(constraints) if constraints else "- None"
+
+    def _build_contextual_factors(self, config: PromptConfig) -> str:
+        """Build contextual factors list for statistical analysis section."""
+        factors = []
+
+        if config.include_stats:
+            factors.append("team/player statistics")
+
+        if config.include_injuries:
+            factors.append("injuries")
+
+        if config.include_weather:
+            factors.append("weather")
+
+        if config.include_trends:
+            factors.append("recent trends")
+
+        if factors:
+            factors_str = ", ".join(factors)
+            return f"   - Factor in {factors_str}"
+        else:
+            return ""
 
     def calculate_parlay_odds(self, selections: List[str]) -> str:
         """

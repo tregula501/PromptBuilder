@@ -40,7 +40,7 @@ Please analyze the above betting opportunities considering the following aspects
 3. STATISTICAL ANALYSIS:
    - Analyze team/player statistics and trends
    - Consider recent form and head-to-head history
-   - Factor in injuries, weather, and other contextual data
+{contextual_factors}
    - Calculate implied probability from odds
 
 4. RECOMMENDATIONS:
