@@ -164,6 +164,7 @@ class PromptConfig(BaseModel):
     include_weather: bool = True
     include_trends: bool = True
     custom_context: Optional[str] = None
+    selected_sportsbooks: List[str] = []
 
     class Config:
         use_enum_values = True
