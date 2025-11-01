@@ -1,0 +1,45 @@
+{
+    "selected_sports": [
+        "NBA",
+        "NCAAB",
+        "NHL",
+        "NFL",
+        "Soccer",
+        "UFC",
+        "Golf",
+        "NCAAF",
+        "Premier League",
+        "Champions League",
+        "MLB",
+        "Tennis"
+    ],
+    "max_combined_odds": 400,
+    "bet_types": {
+        "moneyline": true,
+        "spread": true,
+        "totals": true,
+        "over_under": false,
+        "parlay": true,
+        "teaser": false,
+        "prop": true,
+        "futures": false,
+        "live": false
+    },
+    "analysis_types": {
+        "value_betting": true,
+        "risk_assessment": true,
+        "statistical_predictions": true,
+        "trend_analysis": true,
+        "injury_impact": false
+    },
+    "ai_model": "Generic/Multiple",
+    "risk_tolerance": "Low",
+    "sportsbooks": [],
+    "custom_prompt_template": "",
+    "theme": "dark",
+    "last_data_source": "api",
+    "include_stats": true,
+    "include_injuries": true,
+    "include_weather": true,
+    "include_trends": true
+}

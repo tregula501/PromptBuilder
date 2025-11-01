@@ -70,10 +70,10 @@ Please analyze these betting opportunities considering value, risk, and statisti
 
         prompt_text = self.default_template.format(
             timestamp=timestamp,
-            sports=", ".join([str(s.value) for s in prompt_config.sports]),
+            sports=", ".join(prompt_config.sports),  # Already strings due to use_enum_values
             max_odds=f"+{prompt_config.max_combined_odds}",
-            bet_types=", ".join([bt.value for bt in prompt_config.bet_types]),
-            risk_level=prompt_config.risk_tolerance.value,
+            bet_types=", ".join(prompt_config.bet_types),  # Already strings
+            risk_level=prompt_config.risk_tolerance,  # Already string
             game_data=game_data_str,
             odds_data=odds_data_str,
             additional_constraints=constraints,
@@ -103,7 +103,7 @@ Please analyze these betting opportunities considering value, risk, and statisti
         formatted_games = []
 
         for idx, game in enumerate(games, 1):
-            game_str = f"\n[Game {idx}] {game.sport.value}\n"
+            game_str = f"\n[Game {idx}] {game.sport}\n"  # Already string
             game_str += f"Matchup: {game.away_team} @ {game.home_team}\n"
 
             if game.game_time:
@@ -189,7 +189,7 @@ Please analyze these betting opportunities considering value, risk, and statisti
 
             # Format each bet type
             for bet_type, odds_list in odds_by_type.items():
-                odds_str += f"\n  {bet_type.value.upper()}:\n"
+                odds_str += f"\n  {bet_type.upper()}:\n"  # Already string
 
                 # Group by sportsbook
                 by_sportsbook: Dict[str, List] = {}
@@ -286,7 +286,7 @@ Please analyze these betting opportunities considering value, risk, and statisti
         """Save generated prompt to file."""
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            sports_str = "_".join([s.value.replace(" ", "") for s in prompt_data.config.sports[:2]])
+            sports_str = "_".join([s.replace(" ", "") for s in prompt_data.config.sports[:2]])  # Already strings
             filename = f"prompt_{sports_str}_{timestamp}.txt"
 
         filepath = self.config.PROMPTS_DIR / filename
