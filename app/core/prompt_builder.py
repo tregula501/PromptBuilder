@@ -1,0 +1,315 @@
+"""
+Core prompt building logic for generating AI-ready betting analysis prompts.
+"""
+
+from datetime import datetime
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+import logging
+
+from app.core.config import get_config
+from app.core.models import (
+    Game, PromptConfig, PromptData, BetType,
+    Parlay, SportType, RiskLevel, AnalysisType
+)
+
+logger = logging.getLogger(__name__)
+
+
+class PromptBuilder:
+    """Builds AI prompts for sports betting analysis."""
+
+    def __init__(self):
+        self.config = get_config()
+        self.templates_dir = self.config.TEMPLATES_DIR
+        self.default_template = self._load_template("default_template.txt")
+
+    def _load_template(self, template_name: str) -> str:
+        """Load a prompt template from file."""
+        template_path = self.templates_dir / template_name
+
+        if not template_path.exists():
+            logger.warning(f"Template not found: {template_name}, using fallback")
+            return self._get_fallback_template()
+
+        try:
+            with open(template_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            logger.error(f"Error loading template: {e}")
+            return self._get_fallback_template()
+
+    def _get_fallback_template(self) -> str:
+        """Get a basic fallback template."""
+        return """=== AI SPORTS BETTING ANALYSIS PROMPT ===
+
+GAME DATA:
+{game_data}
+
+ODDS DATA:
+{odds_data}
+
+Please analyze these betting opportunities considering value, risk, and statistics.
+"""
+
+    def build_prompt(self, prompt_config: PromptConfig, games: List[Game]) -> PromptData:
+        """Build a complete prompt from configuration and game data."""
+        logger.info(f"Building prompt for {len(games)} games")
+
+        # Format game data
+        game_data_str = self._format_game_data(games, prompt_config)
+
+        # Format odds data
+        odds_data_str = self._format_odds_data(games)
+
+        # Build additional constraints
+        constraints = self._build_constraints(prompt_config)
+
+        # Format template
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        prompt_text = self.default_template.format(
+            timestamp=timestamp,
+            sports=", ".join([str(s.value) for s in prompt_config.sports]),
+            max_odds=f"+{prompt_config.max_combined_odds}",
+            bet_types=", ".join([bt.value for bt in prompt_config.bet_types]),
+            risk_level=prompt_config.risk_tolerance.value,
+            game_data=game_data_str,
+            odds_data=odds_data_str,
+            additional_constraints=constraints,
+            custom_context=prompt_config.custom_context or "None provided"
+        )
+
+        # Create PromptData object
+        prompt_data = PromptData(
+            config=prompt_config,
+            games=games,
+            prompt_text=prompt_text,
+            metadata={
+                "num_games": len(games),
+                "timestamp": timestamp,
+                "template": "default_template.txt"
+            }
+        )
+
+        logger.info("Prompt generated successfully")
+        return prompt_data
+
+    def _format_game_data(self, games: List[Game], config: PromptConfig) -> str:
+        """Format game data for the prompt."""
+        if not games:
+            return "No games available"
+
+        formatted_games = []
+
+        for idx, game in enumerate(games, 1):
+            game_str = f"\n[Game {idx}] {game.sport.value}\n"
+            game_str += f"Matchup: {game.away_team} @ {game.home_team}\n"
+
+            if game.game_time:
+                game_str += f"Time: {game.game_time.strftime('%Y-%m-%d %I:%M %p')}\n"
+
+            if game.venue:
+                game_str += f"Venue: {game.venue}\n"
+
+            # Add team stats if enabled and available
+            if config.include_stats:
+                if game.home_stats:
+                    game_str += f"\n{game.home_team} Stats:\n"
+                    game_str += self._format_team_stats(game.home_stats)
+
+                if game.away_stats:
+                    game_str += f"\n{game.away_team} Stats:\n"
+                    game_str += self._format_team_stats(game.away_stats)
+
+            # Add weather if enabled and available
+            if config.include_weather and game.weather:
+                game_str += f"\nWeather: {game.weather}\n"
+
+            # Add injuries if enabled
+            if config.include_injuries:
+                injuries = []
+                if game.home_stats and game.home_stats.injuries:
+                    injuries.extend([f"{game.home_team}: {inj}" for inj in game.home_stats.injuries])
+                if game.away_stats and game.away_stats.injuries:
+                    injuries.extend([f"{game.away_team}: {inj}" for inj in game.away_stats.injuries])
+
+                if injuries:
+                    game_str += f"\nInjury Report:\n"
+                    for injury in injuries:
+                        game_str += f"  - {injury}\n"
+
+            if game.notes:
+                game_str += f"\nNotes: {game.notes}\n"
+
+            formatted_games.append(game_str)
+
+        return "\n".join(formatted_games)
+
+    def _format_team_stats(self, stats) -> str:
+        """Format team statistics."""
+        lines = []
+
+        if stats.wins is not None and stats.losses is not None:
+            lines.append(f"  Record: {stats.wins}-{stats.losses}")
+
+        if stats.points_per_game:
+            lines.append(f"  PPG: {stats.points_per_game:.1f}")
+
+        if stats.points_allowed_per_game:
+            lines.append(f"  Opp PPG: {stats.points_allowed_per_game:.1f}")
+
+        if stats.streak:
+            lines.append(f"  Streak: {stats.streak}")
+
+        if stats.recent_form:
+            lines.append(f"  Form: {stats.recent_form}")
+
+        return "\n".join(lines) + "\n"
+
+    def _format_odds_data(self, games: List[Game]) -> str:
+        """Format odds data for the prompt."""
+        if not games:
+            return "No odds data available"
+
+        formatted_odds = []
+
+        for idx, game in enumerate(games, 1):
+            if not game.odds:
+                continue
+
+            odds_str = f"\n[Game {idx}] {game.away_team} @ {game.home_team}\n"
+
+            # Group odds by bet type
+            odds_by_type: Dict[BetType, List] = {}
+            for odd in game.odds:
+                if odd.bet_type not in odds_by_type:
+                    odds_by_type[odd.bet_type] = []
+                odds_by_type[odd.bet_type].append(odd)
+
+            # Format each bet type
+            for bet_type, odds_list in odds_by_type.items():
+                odds_str += f"\n  {bet_type.value.upper()}:\n"
+
+                # Group by sportsbook
+                by_sportsbook: Dict[str, List] = {}
+                for odd in odds_list:
+                    if odd.sportsbook not in by_sportsbook:
+                        by_sportsbook[odd.sportsbook] = []
+                    by_sportsbook[odd.sportsbook].append(odd)
+
+                for sportsbook, book_odds in by_sportsbook.items():
+                    odds_str += f"    {sportsbook}:\n"
+                    for odd in book_odds:
+                        line_info = f" ({odd.line})" if odd.line else ""
+                        odds_str += f"      {odd.odds}{line_info}\n"
+
+            formatted_odds.append(odds_str)
+
+        return "\n".join(formatted_odds)
+
+    def _build_constraints(self, config: PromptConfig) -> str:
+        """Build additional constraints section."""
+        constraints = []
+
+        if config.include_stats:
+            constraints.append("- Consider team and player statistics")
+
+        if config.include_injuries:
+            constraints.append("- Factor in injury reports")
+
+        if config.include_weather:
+            constraints.append("- Account for weather conditions")
+
+        if config.include_trends:
+            constraints.append("- Analyze recent trends and patterns")
+
+        # Add analysis type specific constraints
+        if AnalysisType.VALUE_BETTING in config.analysis_types:
+            constraints.append("- Focus on identifying +EV opportunities")
+
+        if AnalysisType.RISK_ASSESSMENT in config.analysis_types:
+            constraints.append("- Provide detailed risk analysis for each bet")
+
+        if AnalysisType.STATISTICAL_PREDICTIONS in config.analysis_types:
+            constraints.append("- Use statistical models for predictions")
+
+        return "\n".join(constraints) if constraints else "- None"
+
+    def calculate_parlay_odds(self, selections: List[str]) -> str:
+        """
+        Calculate combined parlay odds from American odds.
+
+        Args:
+            selections: List of American odds strings (e.g., ["+150", "-200", "+300"])
+
+        Returns:
+            Combined odds as string
+        """
+        if not selections:
+            return "+100"
+
+        decimal_odds = []
+        for odd_str in selections:
+            try:
+                odd_str = odd_str.strip().replace("+", "")
+                odd = int(odd_str)
+
+                # Convert American to decimal
+                if odd > 0:
+                    decimal = 1 + (odd / 100)
+                else:
+                    decimal = 1 + (100 / abs(odd))
+
+                decimal_odds.append(decimal)
+            except:
+                logger.warning(f"Invalid odds format: {odd_str}")
+                continue
+
+        if not decimal_odds:
+            return "+100"
+
+        # Calculate combined decimal odds
+        combined_decimal = 1
+        for dec in decimal_odds:
+            combined_decimal *= dec
+
+        # Convert back to American
+        if combined_decimal >= 2:
+            combined_american = int((combined_decimal - 1) * 100)
+            return f"+{combined_american}"
+        else:
+            combined_american = int(-100 / (combined_decimal - 1))
+            return str(combined_american)
+
+    def save_prompt(self, prompt_data: PromptData, filename: Optional[str] = None) -> Path:
+        """Save generated prompt to file."""
+        if not filename:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            sports_str = "_".join([s.value.replace(" ", "") for s in prompt_data.config.sports[:2]])
+            filename = f"prompt_{sports_str}_{timestamp}.txt"
+
+        filepath = self.config.PROMPTS_DIR / filename
+
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(prompt_data.prompt_text)
+
+            logger.info(f"Prompt saved to: {filepath}")
+            return filepath
+
+        except Exception as e:
+            logger.error(f"Error saving prompt: {e}")
+            raise
+
+
+# Singleton instance
+_prompt_builder: Optional[PromptBuilder] = None
+
+
+def get_prompt_builder() -> PromptBuilder:
+    """Get the prompt builder singleton."""
+    global _prompt_builder
+    if _prompt_builder is None:
+        _prompt_builder = PromptBuilder()
+    return _prompt_builder

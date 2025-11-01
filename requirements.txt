@@ -1,0 +1,38 @@
+# UI Framework
+customtkinter>=5.2.0
+pillow>=10.0.0
+
+# HTTP Requests & Web Scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+selenium>=4.15.0
+
+# Data Validation & Models
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Configuration Management
+python-dotenv>=1.0.0
+
+# GitHub Integration
+GitPython>=3.1.40
+
+# Data Manipulation
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Date/Time Handling
+python-dateutil>=2.8.2
+
+# JSON/YAML Processing
+pyyaml>=6.0.0
+
+# Logging
+colorlog>=6.7.0
+
+# API Rate Limiting
+ratelimit>=2.2.1
+
+# Type Hints
+typing-extensions>=4.8.0

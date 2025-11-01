@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment Variables & Secrets
+.env
+.env.local
+*.key
+credentials.json
+secrets.json
+
+# API Keys & Config
+config.ini
+settings.json
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Selenium
+chromedriver
+geckodriver
+*.exe
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Project Specific
+prompts/temp/
+*.bak
+
+# Don't ignore example prompts in templates
+!templates/*.txt
+!templates/*.md

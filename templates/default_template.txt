@@ -1,0 +1,67 @@
+=== AI SPORTS BETTING ANALYSIS PROMPT ===
+Generated: {timestamp}
+Sport(s): {sports}
+Max Combined Odds: {max_odds}
+Bet Configuration: {bet_types}
+Risk Tolerance: {risk_level}
+
+════════════════════════════════════════════════════════════════
+
+CONTEXT:
+You are an expert sports betting analyst. I need your help analyzing the following betting opportunities with a data-driven, objective approach. Please provide comprehensive analysis focusing on value, risk, and probability.
+
+════════════════════════════════════════════════════════════════
+
+GAME DATA:
+{game_data}
+
+════════════════════════════════════════════════════════════════
+
+ODDS INFORMATION:
+{odds_data}
+
+════════════════════════════════════════════════════════════════
+
+ANALYSIS REQUEST:
+Please analyze the above betting opportunities considering the following aspects:
+
+1. VALUE BETTING ASSESSMENT:
+   - Identify which bets offer positive expected value
+   - Compare odds across different sportsbooks
+   - Highlight any significant line movements or discrepancies
+   - Assess if the odds accurately reflect the true probability
+
+2. RISK EVALUATION:
+   - Evaluate the risk level of each bet (Low/Medium/High)
+   - Identify potential pitfalls or concerns
+   - Consider variance and bankroll management
+   - Assess correlation risk for parlays
+
+3. STATISTICAL ANALYSIS:
+   - Analyze team/player statistics and trends
+   - Consider recent form and head-to-head history
+   - Factor in injuries, weather, and other contextual data
+   - Calculate implied probability from odds
+
+4. RECOMMENDATIONS:
+   - Rank the betting opportunities by confidence level
+   - Suggest optimal bet sizing for each selection
+   - Provide reasoning for each recommendation
+   - Highlight which bets to avoid and why
+
+════════════════════════════════════════════════════════════════
+
+CONSTRAINTS:
+- Maximum combined odds: {max_odds}
+- Risk tolerance: {risk_level}
+- Bet types allowed: {bet_types}
+{additional_constraints}
+
+════════════════════════════════════════════════════════════════
+
+ADDITIONAL CONTEXT:
+{custom_context}
+
+════════════════════════════════════════════════════════════════
+
+Please provide your analysis in a clear, structured format with specific actionable insights.
