@@ -11,6 +11,12 @@ from app.ui.styles import (
     COLORS, FONTS, SPACING, DIMENSIONS,
     get_theme_colors, get_button_style
 )
+from app.ui.tabs.sports_selection import SportsSelectionTab
+from app.ui.tabs.bet_configuration import BetConfigurationTab
+from app.ui.tabs.prompt_preview import PromptPreviewTab
+from app.core.prompt_builder import get_prompt_builder
+from app.core.data_fetcher import get_odds_api_client
+from app.core.models import PromptConfig
 
 logger = logging.getLogger(__name__)
 
@@ -180,37 +186,57 @@ class PromptBuilderApp(ctk.CTk):
         self.content_area.grid_rowconfigure(0, weight=1)
         self.content_area.grid_columnconfigure(0, weight=1)
 
-        # Tab frames (will be populated later)
+        # Tab frames
         self.tabs = {}
-        self._create_placeholder_tabs()
+        self._create_tabs()
 
         # Show default tab
         self.current_tab = "Sports"
         self._switch_tab("Sports")
 
-    def _create_placeholder_tabs(self):
-        """Create placeholder tabs (will be replaced with actual UI components)."""
+    def _create_tabs(self):
+        """Create application tabs."""
         colors = get_theme_colors(self.theme)
-        tab_names = ["Sports", "Bet Config", "Data Sources", "Preview", "Settings"]
 
-        for tab_name in tab_names:
-            # Create tab frame
-            tab_frame = ctk.CTkFrame(
-                self.content_area,
-                corner_radius=0,
-                fg_color=colors["bg_primary"]
-            )
+        # Sports Selection Tab
+        self.tabs["Sports"] = SportsSelectionTab(
+            self.content_area,
+            fg_color=colors["bg_primary"]
+        )
 
-            # Placeholder content
-            placeholder = ctk.CTkLabel(
-                tab_frame,
-                text=f"{tab_name} Tab\n\nComing soon...",
-                font=FONTS["heading_medium"],
-                text_color=colors["text_secondary"]
-            )
-            placeholder.pack(expand=True)
+        # Bet Configuration Tab
+        self.tabs["Bet Config"] = BetConfigurationTab(
+            self.content_area,
+            fg_color=colors["bg_primary"]
+        )
 
-            self.tabs[tab_name] = tab_frame
+        # Data Sources Tab (placeholder for now)
+        data_tab = ctk.CTkFrame(self.content_area, corner_radius=0, fg_color=colors["bg_primary"])
+        placeholder = ctk.CTkLabel(
+            data_tab,
+            text="Data Sources Tab\n\nConfigure API keys in Settings",
+            font=FONTS["heading_medium"],
+            text_color=colors["text_secondary"]
+        )
+        placeholder.pack(expand=True)
+        self.tabs["Data Sources"] = data_tab
+
+        # Prompt Preview Tab
+        self.tabs["Preview"] = PromptPreviewTab(
+            self.content_area,
+            fg_color=colors["bg_primary"]
+        )
+
+        # Settings Tab (placeholder for now)
+        settings_tab = ctk.CTkFrame(self.content_area, corner_radius=0, fg_color=colors["bg_primary"])
+        placeholder = ctk.CTkLabel(
+            settings_tab,
+            text="Settings Tab\n\nEdit .env file for API keys",
+            font=FONTS["heading_medium"],
+            text_color=colors["text_secondary"]
+        )
+        placeholder.pack(expand=True)
+        self.tabs["Settings"] = settings_tab
 
     def _switch_tab(self, tab_name: str):
         """Switch to the specified tab."""
@@ -243,8 +269,50 @@ class PromptBuilderApp(ctk.CTk):
         """Generate prompt based on current configuration."""
         self._update_status("Generating prompt...", "warning")
         logger.info("Generate prompt button clicked")
-        # TODO: Implement prompt generation logic
-        self._update_status("Prompt generated!", "success")
+
+        try:
+            # Get selected sports
+            sports_tab = self.tabs["Sports"]
+            selected_sports = sports_tab.get_selected_sports()
+
+            if not selected_sports:
+                self._update_status("Please select at least one sport", "error")
+                return
+
+            # Get bet configuration
+            bet_tab = self.tabs["Bet Config"]
+            bet_config = bet_tab.get_configuration()
+
+            # Create prompt configuration
+            config = PromptConfig(
+                sports=selected_sports,
+                max_combined_odds=bet_config["max_odds"],
+                bet_types=bet_config["bet_types"],
+                analysis_types=bet_config["analysis_types"],
+                risk_tolerance=bet_config["risk_level"],
+                include_stats=bet_config["include_stats"],
+                include_injuries=bet_config["include_injuries"],
+                include_weather=bet_config["include_weather"],
+                include_trends=bet_config["include_trends"]
+            )
+
+            # Build prompt with example games (no API call for demo)
+            builder = get_prompt_builder()
+            prompt_data = builder.build_prompt(config, [])  # Empty games list for demo
+
+            # Show in preview tab
+            preview_tab = self.tabs["Preview"]
+            preview_tab.set_prompt(prompt_data.prompt_text)
+
+            # Switch to preview tab
+            self._switch_tab("Preview")
+
+            self._update_status("Prompt generated!", "success")
+            logger.info("Prompt generated successfully")
+
+        except Exception as e:
+            self._update_status(f"Error: {str(e)}", "error")
+            logger.error(f"Error generating prompt: {e}", exc_info=True)
 
     def _save_to_github(self):
         """Save prompt to GitHub."""
