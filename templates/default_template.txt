@@ -25,36 +25,14 @@ ODDS INFORMATION:
 ANALYSIS REQUEST:
 Please analyze the above betting opportunities considering the following aspects:
 
-1. VALUE BETTING ASSESSMENT:
-   - Identify which bets offer positive expected value
-   - Compare odds across different sportsbooks
-   - Highlight any significant line movements or discrepancies
-   - Assess if the odds accurately reflect the true probability
-
-2. RISK EVALUATION:
-   - Evaluate the risk level of each bet (Low/Medium/High)
-   - Identify potential pitfalls or concerns
-   - Consider variance and bankroll management
-   - Assess correlation risk for parlays
-
-3. STATISTICAL ANALYSIS:
-   - Analyze team/player statistics and trends
-   - Consider recent form and head-to-head history
-{contextual_factors}
-   - Calculate implied probability from odds
-
-4. RECOMMENDATIONS:
-   - Rank the betting opportunities by confidence level
-   - Suggest optimal bet sizing for each selection
-   - Provide reasoning for each recommendation
-   - Highlight which bets to avoid and why
+{analysis_sections}
 
 ════════════════════════════════════════════════════════════════
 
 CONSTRAINTS:
 - Maximum combined odds: {max_odds}
 - Risk tolerance: {risk_level}
-- Bet types allowed: {bet_types}
+- Focus analysis on: {bet_types}
 {additional_constraints}
 
 ════════════════════════════════════════════════════════════════

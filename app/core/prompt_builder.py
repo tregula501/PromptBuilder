@@ -12,6 +12,7 @@ from app.core.models import (
     Game, PromptConfig, PromptData, BetType,
     Parlay, SportType, RiskLevel, AnalysisType
 )
+from app.core.odds_utils import calculate_implied_probability
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +60,18 @@ Please analyze these betting opportunities considering value, risk, and statisti
         # Format game data
         game_data_str = self._format_game_data(games, prompt_config)
 
-        # Format odds data
-        odds_data_str = self._format_odds_data(games)
+        # Format odds data with sportsbook filtering
+        selected_books = prompt_config.selected_sportsbooks if prompt_config.selected_sportsbooks else None
+        odds_data_str = self._format_odds_data(games, selected_books)
 
         # Build additional constraints
         constraints = self._build_constraints(prompt_config)
 
         # Build contextual factors list
         contextual_factors = self._build_contextual_factors(prompt_config)
+
+        # Build dynamic analysis sections
+        analysis_sections = self._build_analysis_sections(prompt_config)
 
         # Format template
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -81,6 +86,7 @@ Please analyze these betting opportunities considering value, risk, and statisti
             odds_data=odds_data_str,
             additional_constraints=constraints,
             contextual_factors=contextual_factors,
+            analysis_sections=analysis_sections,
             custom_context=prompt_config.custom_context or "None provided"
         )
 
@@ -171,8 +177,8 @@ Please analyze these betting opportunities considering value, risk, and statisti
 
         return "\n".join(lines) + "\n"
 
-    def _format_odds_data(self, games: List[Game]) -> str:
-        """Format odds data for the prompt."""
+    def _format_odds_data(self, games: List[Game], selected_sportsbooks: List[str] = None) -> str:
+        """Format odds data for the prompt with optional sportsbook filtering."""
         if not games:
             return "No odds data available"
 
@@ -184,9 +190,14 @@ Please analyze these betting opportunities considering value, risk, and statisti
 
             odds_str = f"\n[Game {idx}] {game.away_team} @ {game.home_team}\n"
 
+            # Filter odds by selected sportsbooks if specified
+            filtered_odds = game.odds
+            if selected_sportsbooks:
+                filtered_odds = [odd for odd in game.odds if odd.sportsbook in selected_sportsbooks]
+
             # Group odds by bet type
             odds_by_type: Dict[BetType, List] = {}
-            for odd in game.odds:
+            for odd in filtered_odds:
                 if odd.bet_type not in odds_by_type:
                     odds_by_type[odd.bet_type] = []
                 odds_by_type[odd.bet_type].append(odd)
@@ -206,7 +217,12 @@ Please analyze these betting opportunities considering value, risk, and statisti
                     odds_str += f"    {sportsbook}:\n"
                     for odd in book_odds:
                         line_info = f" ({odd.line})" if odd.line else ""
-                        odds_str += f"      {odd.odds}{line_info}\n"
+
+                        # Calculate and add implied probability
+                        implied_prob = calculate_implied_probability(odd.odds)
+                        prob_str = f" [Implied: {implied_prob:.1f}%]" if implied_prob is not None else ""
+
+                        odds_str += f"      {odd.odds}{line_info}{prob_str}\n"
 
             formatted_odds.append(odds_str)
 
@@ -261,6 +277,70 @@ Please analyze these betting opportunities considering value, risk, and statisti
             return f"   - Factor in {factors_str}"
         else:
             return ""
+
+    def _build_analysis_sections(self, config: PromptConfig) -> str:
+        """Build dynamic analysis sections based on selected analysis types."""
+        sections = []
+        section_num = 1
+
+        # Parlay guidance (conditional based on bet types)
+        parlay_guidance = ""
+        if BetType.PARLAY in config.bet_types:
+            parlay_guidance = "\n   - Assess correlation risk for parlays"
+
+        # VALUE BETTING section
+        if AnalysisType.VALUE_BETTING in config.analysis_types:
+            sections.append(f"""{section_num}. VALUE BETTING ASSESSMENT:
+   - Identify which bets offer positive expected value
+   - Compare odds across different sportsbooks
+   - Highlight any significant line movements or discrepancies
+   - Assess if the odds accurately reflect the true probability""")
+            section_num += 1
+
+        # RISK EVALUATION section
+        if AnalysisType.RISK_ASSESSMENT in config.analysis_types:
+            sections.append(f"""{section_num}. RISK EVALUATION:
+   - Evaluate the risk level of each bet (Low/Medium/High)
+   - Identify potential pitfalls or concerns
+   - Consider variance and bankroll management{parlay_guidance}""")
+            section_num += 1
+
+        # STATISTICAL ANALYSIS section
+        if AnalysisType.STATISTICAL_PREDICTIONS in config.analysis_types:
+            contextual_factors = self._build_contextual_factors(config)
+            sections.append(f"""{section_num}. STATISTICAL ANALYSIS:
+   - Analyze team/player statistics and trends
+   - Consider recent form and head-to-head history
+{contextual_factors}
+   - Calculate implied probability from odds""")
+            section_num += 1
+
+        # TREND ANALYSIS section (if selected separately)
+        if AnalysisType.TREND_ANALYSIS in config.analysis_types:
+            sections.append(f"""{section_num}. TREND ANALYSIS:
+   - Identify momentum and recent performance patterns
+   - Analyze home/away splits and situational trends
+   - Consider rest days, travel, and scheduling factors
+   - Evaluate how teams perform against similar opponents""")
+            section_num += 1
+
+        # INJURY IMPACT section (if selected separately)
+        if AnalysisType.INJURY_IMPACT in config.analysis_types:
+            sections.append(f"""{section_num}. INJURY IMPACT ANALYSIS:
+   - Assess the significance of each injury to team performance
+   - Evaluate depth chart and replacement player capabilities
+   - Consider impact on game plan and strategy
+   - Analyze historical performance without injured players""")
+            section_num += 1
+
+        # RECOMMENDATIONS section (always included)
+        sections.append(f"""{section_num}. RECOMMENDATIONS:
+   - Rank the betting opportunities by confidence level
+   - Suggest optimal bet sizing for each selection
+   - Provide reasoning for each recommendation
+   - Highlight which bets to avoid and why""")
+
+        return "\n\n".join(sections)
 
     def calculate_parlay_odds(self, selections: List[str]) -> str:
         """
