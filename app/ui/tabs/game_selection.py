@@ -3,7 +3,7 @@ Game Selection Tab - Fetch and select live games from sportsbooks.
 """
 
 import customtkinter as ctk
-from typing import Dict, List, Set
+from typing import Dict, List
 from datetime import datetime
 import logging
 import threading
@@ -137,7 +137,7 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
 
         # State
         self.fetched_games: Dict[SportType, List[Game]] = {}
-        self.selected_games: Set[Game] = set()
+        self.selected_games: List[Game] = []  # Changed from Set to List (Game not hashable)
         self.game_cards: List[GameCard] = []
         self.is_loading = False
 
@@ -340,9 +340,11 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
     def _on_game_selected(self, game: Game, selected: bool):
         """Handle game selection change."""
         if selected:
-            self.selected_games.add(game)
+            if game not in self.selected_games:
+                self.selected_games.append(game)
         else:
-            self.selected_games.discard(game)
+            if game in self.selected_games:
+                self.selected_games.remove(game)
 
         self._update_selection_count()
         logger.debug(f"Game {'selected' if selected else 'deselected'}: {format_game_summary(game)}")
@@ -351,7 +353,8 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         """Select all fetched games."""
         for card in self.game_cards:
             card.set_selected(True)
-            self.selected_games.add(card.game)
+            if card.game not in self.selected_games:
+                self.selected_games.append(card.game)
 
         self._update_selection_count()
         logger.info(f"Selected all {len(self.game_cards)} games")
