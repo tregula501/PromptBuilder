@@ -38,11 +38,11 @@ class PromptPreviewTab(ctk.CTkFrame):
         # Header with actions
         self._create_header()
 
+        # Footer with stats (create before text area so labels exist)
+        self._create_footer()
+
         # Prompt text area
         self._create_text_area()
-
-        # Footer with stats
-        self._create_footer()
 
     def _create_header(self):
         """Create header with title and action buttons."""
