@@ -33,6 +33,9 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
         self.analysis_vars: Dict[AnalysisType, ctk.BooleanVar] = {}
         self.selected_analyses: Set[AnalysisType] = set()
 
+        self.sportsbook_vars: Dict[str, ctk.BooleanVar] = {}
+        self.selected_sportsbooks: Set[str] = set()
+
         self.max_odds_var = ctk.IntVar(value=400)
         self.risk_level_var = ctk.StringVar(value="Medium")
 
@@ -75,6 +78,9 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
 
         # Include Options Section
         row = self._create_include_options_section(row)
+
+        # Sportsbook Filter Section
+        row = self._create_sportsbook_section(row)
 
         # Save button
         self._create_save_button(row)
@@ -298,6 +304,93 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
 
         return start_row + 1
 
+    def _create_sportsbook_section(self, start_row: int) -> int:
+        """Create sportsbook filter section."""
+        frame = ctk.CTkFrame(self, **get_frame_style("card", self.theme))
+        frame.grid(row=start_row, column=0, padx=SPACING["xl"], pady=SPACING["md"], sticky="ew")
+        frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        # Title
+        title = ctk.CTkLabel(
+            frame,
+            text="Sportsbook Filter",
+            font=FONTS["heading_small"],
+            text_color=self.colors["accent"]
+        )
+        title.grid(row=0, column=0, columnspan=3, padx=SPACING["lg"], pady=(SPACING["lg"], SPACING["sm"]), sticky="w")
+
+        # Description
+        desc = ctk.CTkLabel(
+            frame,
+            text="Select which sportsbooks to display in odds (leave all unchecked to show all)",
+            font=FONTS["body_small"],
+            text_color=self.colors["text_secondary"]
+        )
+        desc.grid(row=1, column=0, columnspan=3, padx=SPACING["lg"], pady=(0, SPACING["md"]), sticky="w")
+
+        # Common sportsbooks
+        sportsbooks = [
+            "DraftKings",
+            "FanDuel",
+            "BetMGM",
+            "Caesars",
+            "PointsBet",
+            "BetRivers",
+            "Unibet",
+            "WynnBET",
+            "ESPN BET",
+            "Bet365",
+            "Bovada",
+            "MyBookie"
+        ]
+
+        # Select All / Clear All buttons
+        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_frame.grid(row=2, column=0, columnspan=3, padx=SPACING["lg"], pady=SPACING["sm"], sticky="w")
+
+        select_all_btn = ctk.CTkButton(
+            btn_frame,
+            text="Select All",
+            font=FONTS["body_small"],
+            **get_button_style("secondary", self.theme),
+            width=100,
+            height=28,
+            command=self._select_all_sportsbooks
+        )
+        select_all_btn.grid(row=0, column=0, padx=SPACING["xs"])
+
+        clear_all_btn = ctk.CTkButton(
+            btn_frame,
+            text="Clear All",
+            font=FONTS["body_small"],
+            **get_button_style("secondary", self.theme),
+            width=100,
+            height=28,
+            command=self._clear_all_sportsbooks
+        )
+        clear_all_btn.grid(row=0, column=1, padx=SPACING["xs"])
+
+        # Sportsbook checkboxes (3 columns)
+        for idx, sportsbook in enumerate(sportsbooks):
+            var = ctk.BooleanVar(value=False)  # Default: show all (none selected)
+            self.sportsbook_vars[sportsbook] = var
+
+            col = idx % 3
+            row = 3 + (idx // 3)
+
+            checkbox = ctk.CTkCheckBox(
+                frame,
+                text=sportsbook,
+                variable=var,
+                font=FONTS["body_medium"],
+                text_color=self.colors["text_primary"],
+                fg_color=self.colors["accent"],
+                command=lambda sb=sportsbook: self._on_sportsbook_toggle(sb)
+            )
+            checkbox.grid(row=row, column=col, padx=SPACING["lg"], pady=SPACING["xs"], sticky="w")
+
+        return start_row + 1
+
     def _create_save_button(self, start_row: int):
         """Create save configuration button."""
         btn = ctk.CTkButton(
@@ -329,6 +422,25 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
         else:
             self.selected_analyses.discard(analysis_type)
 
+    def _on_sportsbook_toggle(self, sportsbook: str):
+        """Handle sportsbook checkbox toggle."""
+        if self.sportsbook_vars[sportsbook].get():
+            self.selected_sportsbooks.add(sportsbook)
+        else:
+            self.selected_sportsbooks.discard(sportsbook)
+
+    def _select_all_sportsbooks(self):
+        """Select all sportsbooks."""
+        for sportsbook, var in self.sportsbook_vars.items():
+            var.set(True)
+            self.selected_sportsbooks.add(sportsbook)
+
+    def _clear_all_sportsbooks(self):
+        """Clear all sportsbook selections."""
+        for sportsbook, var in self.sportsbook_vars.items():
+            var.set(False)
+            self.selected_sportsbooks.discard(sportsbook)
+
     def _save_configuration(self):
         """Save current configuration as default."""
         self.config.update_settings({
@@ -339,7 +451,8 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
             "include_stats": self.include_stats_var.get(),
             "include_injuries": self.include_injuries_var.get(),
             "include_weather": self.include_weather_var.get(),
-            "include_trends": self.include_trends_var.get()
+            "include_trends": self.include_trends_var.get(),
+            "selected_sportsbooks": list(self.selected_sportsbooks)
         })
         logger.info("Saved bet configuration as default")
 
@@ -353,5 +466,6 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
             "include_stats": self.include_stats_var.get(),
             "include_injuries": self.include_injuries_var.get(),
             "include_weather": self.include_weather_var.get(),
-            "include_trends": self.include_trends_var.get()
+            "include_trends": self.include_trends_var.get(),
+            "selected_sportsbooks": list(self.selected_sportsbooks)
         }

@@ -138,6 +138,7 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         # State
         self.fetched_games: Dict[SportType, List[Game]] = {}
         self.selected_games: List[Game] = []  # Changed from Set to List (Game not hashable)
+        self.selected_game_keys: set = set()  # Track unique keys to prevent duplicates
         self.game_cards: List[GameCard] = []
         self.is_loading = False
 
@@ -339,12 +340,17 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
 
     def _on_game_selected(self, game: Game, selected: bool):
         """Handle game selection change."""
+        game_key = game.get_unique_key()
+
         if selected:
-            if game not in self.selected_games:
+            if game_key not in self.selected_game_keys:
                 self.selected_games.append(game)
+                self.selected_game_keys.add(game_key)
         else:
-            if game in self.selected_games:
-                self.selected_games.remove(game)
+            if game_key in self.selected_game_keys:
+                # Remove game by finding it with matching key
+                self.selected_games = [g for g in self.selected_games if g.get_unique_key() != game_key]
+                self.selected_game_keys.remove(game_key)
 
         self._update_selection_count()
         logger.debug(f"Game {'selected' if selected else 'deselected'}: {format_game_summary(game)}")
@@ -353,8 +359,10 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         """Select all fetched games."""
         for card in self.game_cards:
             card.set_selected(True)
-            if card.game not in self.selected_games:
+            game_key = card.game.get_unique_key()
+            if game_key not in self.selected_game_keys:
                 self.selected_games.append(card.game)
+                self.selected_game_keys.add(game_key)
 
         self._update_selection_count()
         logger.info(f"Selected all {len(self.game_cards)} games")
@@ -365,6 +373,7 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
             card.set_selected(False)
 
         self.selected_games.clear()
+        self.selected_game_keys.clear()
         self._update_selection_count()
         logger.info("Cleared all game selections")
 

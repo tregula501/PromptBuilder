@@ -249,8 +249,14 @@ class PromptBuilderApp(ctk.CTk):
             try:
                 games_tab = self.tabs["Games"]
                 selected_games = games_tab.get_selected_games()
+
+                # Get sportsbook filter from Bet Config
+                bet_tab = self.tabs["Bet Config"]
+                bet_config = bet_tab.get_configuration()
+                sportsbook_filter = bet_config.get("selected_sportsbooks", [])
+
                 odds_tab = self.tabs["Odds"]
-                odds_tab.load_games(selected_games)
+                odds_tab.load_games(selected_games, sportsbook_filter if sportsbook_filter else None)
             except Exception as e:
                 logger.error(f"Error refreshing Odds tab: {e}")
 

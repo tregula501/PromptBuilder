@@ -256,8 +256,8 @@ class OddsReviewTab(ctk.CTkScrollableFrame):
         self.odds_container.grid(row=1, column=0, padx=SPACING["xl"], pady=SPACING["md"], sticky="ew")
         self.odds_container.grid_columnconfigure(0, weight=1)
 
-    def load_games(self, games: List[Game]):
-        """Load and display odds for selected games."""
+    def load_games(self, games: List[Game], sportsbook_filter: List[str] = None):
+        """Load and display odds for selected games with optional sportsbook filter."""
         # Clear existing panels
         for panel in self.game_panels:
             panel.destroy()
@@ -270,15 +270,23 @@ class OddsReviewTab(ctk.CTkScrollableFrame):
             )
             return
 
+        # Apply sportsbook filter if specified
+        filtered_games = games
+        if sportsbook_filter:
+            filtered_games = self._filter_games_by_sportsbooks(games, sportsbook_filter)
+            filter_info = f" (filtered to {len(sportsbook_filter)} sportsbook{'s' if len(sportsbook_filter) != 1 else ''})"
+        else:
+            filter_info = ""
+
         # Update info
         self.info_label.configure(
-            text=f"Reviewing odds for {len(games)} selected game{'s' if len(games) != 1 else ''}",
+            text=f"Reviewing odds for {len(games)} selected game{'s' if len(games) != 1 else ''}{filter_info}",
             text_color=self.colors["success"]
         )
 
         # Create panels for each game
         row = 0
-        for game in games:
+        for game in filtered_games:
             panel = GameOddsPanel(
                 self.odds_container,
                 game,
@@ -288,7 +296,26 @@ class OddsReviewTab(ctk.CTkScrollableFrame):
             self.game_panels.append(panel)
             row += 1
 
-        logger.info(f"Loaded odds for {len(games)} games")
+        logger.info(f"Loaded odds for {len(games)} games with sportsbook filter: {sportsbook_filter}")
+
+    def _filter_games_by_sportsbooks(self, games: List[Game], sportsbook_filter: List[str]) -> List[Game]:
+        """Filter games to only include odds from selected sportsbooks."""
+        from copy import deepcopy
+
+        filtered_games = []
+        for game in games:
+            # Create a copy of the game with filtered odds
+            filtered_game = deepcopy(game)
+            filtered_game.odds = [
+                odd for odd in game.odds
+                if odd.sportsbook in sportsbook_filter
+            ]
+
+            # Only include game if it has odds after filtering
+            if filtered_game.odds:
+                filtered_games.append(filtered_game)
+
+        return filtered_games
 
     def refresh(self):
         """Refresh odds display from parent app's selected games."""

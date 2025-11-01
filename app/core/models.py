@@ -117,6 +117,11 @@ class Game(BaseModel):
     class Config:
         use_enum_values = True
 
+    def get_unique_key(self) -> str:
+        """Generate a unique key for this game based on teams and time."""
+        time_str = self.game_time.isoformat() if self.game_time else "no_time"
+        return f"{self.sport}_{self.home_team}_{self.away_team}_{time_str}"
+
 
 class BetSelection(BaseModel):
     """A single bet selection."""
