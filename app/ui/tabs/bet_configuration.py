@@ -8,6 +8,7 @@ import logging
 
 from app.core.models import BetType, RiskLevel, AnalysisType
 from app.core.config import get_config
+from app.core.timezone_utils import get_common_us_timezones, get_system_timezone
 from app.ui.styles import (
     COLORS, FONTS, SPACING, DIMENSIONS,
     get_theme_colors, get_frame_style, get_button_style
@@ -37,8 +38,11 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
         self.selected_sportsbooks: Set[str] = set()
 
         self.max_odds_var = ctk.IntVar(value=400)
+        self.min_parlay_legs_var = ctk.IntVar(value=self.config.get_setting("min_parlay_legs", 2))
+        self.max_parlay_legs_var = ctk.IntVar(value=self.config.get_setting("max_parlay_legs", 10))
         self.risk_level_var = ctk.StringVar(value="Medium")
         self.custom_context_var = ctk.StringVar(value="")
+        self.timezone_var = ctk.StringVar(value=self.config.get_setting("timezone", "America/New_York"))
 
         # Include options
         self.include_stats_var = ctk.BooleanVar(value=True)
@@ -68,11 +72,17 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
         # Odds Limit Section
         row = self._create_odds_limit_section(row)
 
+        # Parlay Legs Section
+        row = self._create_parlay_legs_section(row)
+
         # Bet Types Section
         row = self._create_bet_types_section(row)
 
         # Risk Tolerance Section
         row = self._create_risk_section(row)
+
+        # Timezone Section
+        row = self._create_timezone_section(row)
 
         # Analysis Types Section
         row = self._create_analysis_section(row)
@@ -137,6 +147,101 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
             text_color=self.colors["success"]
         )
         self.odds_value_label.grid(row=3, column=0, padx=SPACING["lg"], pady=(0, SPACING["lg"]))
+
+        return start_row + 1
+
+    def _create_parlay_legs_section(self, start_row: int) -> int:
+        """Create the parlay legs configuration section."""
+        # Frame
+        frame = ctk.CTkFrame(self, **get_frame_style("card", self.theme))
+        frame.grid(row=start_row, column=0, padx=SPACING["xl"], pady=SPACING["md"], sticky="ew")
+        frame.grid_columnconfigure((0, 1), weight=1)
+
+        # Title
+        title = ctk.CTkLabel(
+            frame,
+            text="Parlay Legs Range",
+            font=FONTS["heading_small"],
+            text_color=self.colors["accent"]
+        )
+        title.grid(row=0, column=0, columnspan=2, padx=SPACING["lg"], pady=(SPACING["lg"], SPACING["sm"]), sticky="w")
+
+        # Description
+        desc = ctk.CTkLabel(
+            frame,
+            text="Set the minimum and maximum number of selections (legs) for parlay bets",
+            font=FONTS["body_small"],
+            text_color=self.colors["text_secondary"]
+        )
+        desc.grid(row=1, column=0, columnspan=2, padx=SPACING["lg"], pady=(0, SPACING["md"]), sticky="w")
+
+        # Minimum Legs Section
+        min_container = ctk.CTkFrame(frame, fg_color="transparent")
+        min_container.grid(row=2, column=0, padx=SPACING["lg"], pady=SPACING["md"], sticky="ew")
+
+        min_label = ctk.CTkLabel(
+            min_container,
+            text="Minimum Legs:",
+            font=FONTS["body_medium"],
+            text_color=self.colors["text_primary"]
+        )
+        min_label.pack(anchor="w", pady=(0, SPACING["xs"]))
+
+        min_slider = ctk.CTkSlider(
+            min_container,
+            from_=2,
+            to=10,
+            number_of_steps=8,
+            variable=self.min_parlay_legs_var,
+            command=self._on_min_legs_change,
+            fg_color=self.colors["bg_tertiary"],
+            progress_color=self.colors["accent"],
+            button_color=self.colors["accent"],
+            button_hover_color=self.colors["accent_hover"]
+        )
+        min_slider.pack(fill="x", pady=SPACING["xs"])
+
+        self.min_legs_value_label = ctk.CTkLabel(
+            min_container,
+            text=f"{self.min_parlay_legs_var.get()} legs minimum",
+            font=FONTS["body_large"],
+            text_color=self.colors["success"]
+        )
+        self.min_legs_value_label.pack(anchor="center", pady=SPACING["xs"])
+
+        # Maximum Legs Section
+        max_container = ctk.CTkFrame(frame, fg_color="transparent")
+        max_container.grid(row=2, column=1, padx=SPACING["lg"], pady=SPACING["md"], sticky="ew")
+
+        max_label = ctk.CTkLabel(
+            max_container,
+            text="Maximum Legs:",
+            font=FONTS["body_medium"],
+            text_color=self.colors["text_primary"]
+        )
+        max_label.pack(anchor="w", pady=(0, SPACING["xs"]))
+
+        max_slider = ctk.CTkSlider(
+            max_container,
+            from_=2,
+            to=15,
+            number_of_steps=13,
+            variable=self.max_parlay_legs_var,
+            command=self._on_max_legs_change,
+            fg_color=self.colors["bg_tertiary"],
+            progress_color=self.colors["warning"],
+            button_color=self.colors["warning"],
+            button_hover_color=self.colors["accent_hover"]
+        )
+        max_slider.pack(fill="x", pady=SPACING["xs"])
+
+        self.max_legs_value_label = ctk.CTkLabel(
+            max_container,
+            text=f"{self.max_parlay_legs_var.get()} legs maximum",
+            font=FONTS["body_large"],
+            text_color=self.colors["warning"]
+        )
+        self.max_legs_value_label.pack(anchor="center", pady=SPACING["xs"])
 
         return start_row + 1
 
@@ -225,6 +330,65 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
                 hover_color=self.colors[color]
             )
             radio.grid(row=0, column=idx, padx=SPACING["sm"], pady=SPACING["md"], sticky="ew")
+
+        return start_row + 1
+
+    def _create_timezone_section(self, start_row: int) -> int:
+        """Create timezone selection section."""
+        frame = ctk.CTkFrame(self, **get_frame_style("card", self.theme))
+        frame.grid(row=start_row, column=0, padx=SPACING["xl"], pady=SPACING["md"], sticky="ew")
+        frame.grid_columnconfigure(0, weight=1)
+
+        # Title
+        title = ctk.CTkLabel(
+            frame,
+            text="Timezone",
+            font=FONTS["heading_small"],
+            text_color=self.colors["accent"]
+        )
+        title.grid(row=0, column=0, padx=SPACING["lg"], pady=(SPACING["lg"], SPACING["sm"]), sticky="w")
+
+        # Description
+        desc = ctk.CTkLabel(
+            frame,
+            text="Select your timezone for displaying game times",
+            font=FONTS["body_small"],
+            text_color=self.colors["text_secondary"]
+        )
+        desc.grid(row=1, column=0, padx=SPACING["lg"], pady=(0, SPACING["md"]), sticky="w")
+
+        # Timezone dropdown
+        timezones = get_common_us_timezones()
+
+        # Create a container for the dropdown
+        dropdown_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        dropdown_frame.grid(row=2, column=0, padx=SPACING["lg"], pady=SPACING["md"], sticky="w")
+
+        timezone_dropdown = ctk.CTkOptionMenu(
+            dropdown_frame,
+            variable=self.timezone_var,
+            values=timezones,
+            font=FONTS["body_medium"],
+            fg_color=self.colors["bg_tertiary"],
+            button_color=self.colors["accent"],
+            button_hover_color=self.colors["accent_hover"],
+            dropdown_fg_color=self.colors["bg_secondary"],
+            dropdown_hover_color=self.colors["bg_tertiary"],
+            dropdown_text_color=self.colors["text_primary"],
+            text_color=self.colors["text_primary"],
+            width=250
+        )
+        timezone_dropdown.grid(row=0, column=0, sticky="w")
+
+        # Current timezone info
+        system_tz = get_system_timezone()
+        info_label = ctk.CTkLabel(
+            dropdown_frame,
+            text=f"System timezone: {system_tz}",
+            font=FONTS["body_small"],
+            text_color=self.colors["text_secondary"]
+        )
+        info_label.grid(row=0, column=1, padx=SPACING["lg"], sticky="w")
 
         return start_row + 1
 
@@ -468,6 +632,26 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
         odds_val = int(value)
         self.odds_value_label.configure(text=f"+{odds_val}")
 
+    def _on_min_legs_change(self, value):
+        """Handle minimum parlay legs slider change."""
+        min_val = int(value)
+        self.min_legs_value_label.configure(text=f"{min_val} legs minimum")
+
+        # Ensure min doesn't exceed max
+        if min_val > self.max_parlay_legs_var.get():
+            self.max_parlay_legs_var.set(min_val)
+            self.max_legs_value_label.configure(text=f"{min_val} legs maximum")
+
+    def _on_max_legs_change(self, value):
+        """Handle maximum parlay legs slider change."""
+        max_val = int(value)
+        self.max_legs_value_label.configure(text=f"{max_val} legs maximum")
+
+        # Ensure max doesn't go below min
+        if max_val < self.min_parlay_legs_var.get():
+            self.min_parlay_legs_var.set(max_val)
+            self.min_legs_value_label.configure(text=f"{max_val} legs minimum")
+
     def _on_bet_type_toggle(self, bet_type: BetType):
         """Handle bet type checkbox toggle."""
         if self.bet_type_vars[bet_type].get():
@@ -507,6 +691,8 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
 
         self.config.update_settings({
             "max_combined_odds": self.max_odds_var.get(),
+            "min_parlay_legs": self.min_parlay_legs_var.get(),
+            "max_parlay_legs": self.max_parlay_legs_var.get(),
             "bet_types": {bt.value: (bt in self.selected_bet_types) for bt in BetType},
             "risk_tolerance": self.risk_level_var.get(),
             "analysis_types": {at.value: (at in self.selected_analyses) for at in AnalysisType},
@@ -515,7 +701,8 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
             "include_weather": self.include_weather_var.get(),
             "include_trends": self.include_trends_var.get(),
             "selected_sportsbooks": list(self.selected_sportsbooks),
-            "custom_context": custom_context
+            "custom_context": custom_context,
+            "timezone": self.timezone_var.get()
         })
         logger.info("Saved bet configuration as default")
 
@@ -534,6 +721,8 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
         """Get current bet configuration."""
         return {
             "max_odds": self.max_odds_var.get(),
+            "min_parlay_legs": self.min_parlay_legs_var.get(),
+            "max_parlay_legs": self.max_parlay_legs_var.get(),
             "bet_types": list(self.selected_bet_types),
             "risk_level": RiskLevel(self.risk_level_var.get()),
             "analysis_types": list(self.selected_analyses),

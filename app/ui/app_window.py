@@ -303,6 +303,8 @@ class PromptBuilderApp(ctk.CTk):
             config = PromptConfig(
                 sports=selected_sports,
                 max_combined_odds=bet_config["max_odds"],
+                min_parlay_legs=bet_config.get("min_parlay_legs", 2),
+                max_parlay_legs=bet_config.get("max_parlay_legs", 10),
                 bet_types=bet_config["bet_types"],
                 analysis_types=bet_config["analysis_types"],
                 risk_tolerance=bet_config["risk_level"],

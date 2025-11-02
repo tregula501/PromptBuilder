@@ -15,6 +15,7 @@ from app.core.odds_utils import (
     get_odds_summary
 )
 from app.core.config import get_config
+from app.core.timezone_utils import format_game_time
 from app.ui.styles import (
     COLORS, FONTS, SPACING, DIMENSIONS,
     get_theme_colors, get_frame_style
@@ -159,7 +160,8 @@ class GameOddsPanel(ctk.CTkFrame):
         details_frame.grid(row=1, column=0, columnspan=2, padx=SPACING["lg"], pady=(0, SPACING["md"]), sticky="ew")
 
         # Time
-        time_str = self.game.game_time.strftime("%a, %b %d at %I:%M %p") if self.game.game_time else "Time TBD"
+        user_timezone = self.config.get_setting("timezone", "America/New_York")
+        time_str = format_game_time(self.game.game_time, user_timezone, "%a, %b %d at %I:%M %p %Z")
         time_label = ctk.CTkLabel(
             details_frame,
             text=f"🕐 {time_str}",

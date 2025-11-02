@@ -1,19 +1,10 @@
 {
     "selected_sports": [
-        "NBA",
-        "NCAAB",
-        "NHL",
-        "NFL",
-        "Soccer",
-        "UFC",
-        "Golf",
-        "NCAAF",
-        "Premier League",
-        "Champions League",
-        "MLB",
-        "Tennis"
+        "UFC"
     ],
     "max_combined_odds": 400,
+    "min_parlay_legs": 2,
+    "max_parlay_legs": 10,
     "bet_types": {
         "moneyline": true,
         "spread": true,
@@ -33,13 +24,21 @@
         "injury_impact": false
     },
     "ai_model": "Generic/Multiple",
-    "risk_tolerance": "Low",
+    "risk_tolerance": "Medium",
     "sportsbooks": [],
     "custom_prompt_template": "",
     "theme": "dark",
     "last_data_source": "api",
     "include_stats": true,
-    "include_injuries": true,
-    "include_weather": true,
-    "include_trends": true
+    "include_injuries": false,
+    "include_weather": false,
+    "include_trends": true,
+    "selected_sportsbooks": [
+        "DraftKings",
+        "FanDuel",
+        "Bet365",
+        "BetMGM"
+    ],
+    "custom_context": "",
+    "timezone": "America/New_York"
 }

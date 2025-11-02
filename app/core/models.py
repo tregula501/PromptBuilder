@@ -155,6 +155,8 @@ class PromptConfig(BaseModel):
     """Configuration for prompt generation."""
     sports: List[SportType]
     max_combined_odds: int = Field(default=400, ge=100)
+    min_parlay_legs: int = Field(default=2, ge=2, le=15)
+    max_parlay_legs: int = Field(default=10, ge=2, le=15)
     bet_types: List[BetType]
     analysis_types: List[AnalysisType]
     risk_tolerance: RiskLevel = RiskLevel.MEDIUM

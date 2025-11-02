@@ -13,6 +13,7 @@ from app.core.models import (
     Parlay, SportType, RiskLevel, AnalysisType
 )
 from app.core.odds_utils import calculate_implied_probability
+from app.core.timezone_utils import format_game_time
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,9 @@ Please analyze these betting opportunities considering value, risk, and statisti
             game_str += f"Matchup: {game.away_team} @ {game.home_team}\n"
 
             if game.game_time:
-                game_str += f"Time: {game.game_time.strftime('%Y-%m-%d %I:%M %p')}\n"
+                user_timezone = self.config.get_setting("timezone", "America/New_York")
+                time_formatted = format_game_time(game.game_time, user_timezone, "%Y-%m-%d %I:%M %p %Z")
+                game_str += f"Time: {time_formatted}\n"
 
             if game.venue:
                 game_str += f"Venue: {game.venue}\n"
@@ -254,6 +257,13 @@ Please analyze these betting opportunities considering value, risk, and statisti
         if AnalysisType.STATISTICAL_PREDICTIONS in config.analysis_types:
             constraints.append("- Use statistical models for predictions")
 
+        # Add parlay legs constraint if parlay is enabled
+        if BetType.PARLAY in config.bet_types:
+            if config.min_parlay_legs == config.max_parlay_legs:
+                constraints.append(f"- Parlays must contain exactly {config.min_parlay_legs} legs")
+            else:
+                constraints.append(f"- Parlays must contain between {config.min_parlay_legs} and {config.max_parlay_legs} legs")
+
         return "\n".join(constraints) if constraints else "- None"
 
     def _build_contextual_factors(self, config: PromptConfig) -> str:
@@ -286,7 +296,10 @@ Please analyze these betting opportunities considering value, risk, and statisti
         # Parlay guidance (conditional based on bet types)
         parlay_guidance = ""
         if BetType.PARLAY in config.bet_types:
-            parlay_guidance = "\n   - Assess correlation risk for parlays"
+            if config.min_parlay_legs == config.max_parlay_legs:
+                parlay_guidance = f"\n   - Assess correlation risk for parlays (exactly {config.min_parlay_legs} legs)"
+            else:
+                parlay_guidance = f"\n   - Assess correlation risk for parlays ({config.min_parlay_legs}-{config.max_parlay_legs} legs)"
 
         # VALUE BETTING section
         if AnalysisType.VALUE_BETTING in config.analysis_types:

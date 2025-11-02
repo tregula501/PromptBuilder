@@ -12,6 +12,7 @@ from app.core.models import Game, SportType
 from app.core.data_fetcher import get_odds_api_client
 from app.core.odds_utils import get_odds_summary, format_game_summary
 from app.core.config import get_config
+from app.core.timezone_utils import format_game_time
 from app.ui.styles import (
     COLORS, FONTS, SPACING, DIMENSIONS,
     get_theme_colors, get_frame_style, get_button_style
@@ -83,7 +84,9 @@ class GameCard(ctk.CTkFrame):
         sport_badge.grid(row=0, column=1, padx=SPACING["sm"], sticky="e")
 
         # Time and venue
-        time_str = self.game.game_time.strftime("%a %I:%M %p") if self.game.game_time else "Time TBD"
+        # Get configured timezone
+        user_timezone = self.config.get_setting("timezone", "America/New_York")
+        time_str = format_game_time(self.game.game_time, user_timezone)
         venue_str = self.game.venue if self.game.venue else ""
 
         time_venue_text = time_str

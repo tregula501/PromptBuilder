@@ -9,6 +9,8 @@ from collections import defaultdict
 import logging
 
 from app.core.models import Game, OddsData, BetType
+from app.core.config import get_config
+from app.core.timezone_utils import format_game_time
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +304,9 @@ def format_game_summary(game: Game) -> str:
     Example:
         "Lakers vs Warriors - 7:00 PM - 45 odds from 3 books"
     """
-    time_str = game.game_time.strftime("%I:%M %p") if game.game_time else "TBD"
+    config = get_config()
+    user_timezone = config.get_setting("timezone", "America/New_York")
+    time_str = format_game_time(game.game_time, user_timezone, "%I:%M %p %Z")
     summary = get_odds_summary(game)
 
     return (f"{game.away_team} @ {game.home_team} - {time_str} - "
