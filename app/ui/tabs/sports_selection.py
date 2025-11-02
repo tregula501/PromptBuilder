@@ -76,6 +76,7 @@ class SportsSelectionTab(ctk.CTkScrollableFrame):
 
         self._create_sport_category("Soccer / Football", [
             SportType.SOCCER,
+            SportType.MLS,
             SportType.PREMIER_LEAGUE,
             SportType.LA_LIGA,
             SportType.CHAMPIONS_LEAGUE
