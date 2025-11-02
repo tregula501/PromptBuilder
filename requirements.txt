@@ -15,9 +15,6 @@ pydantic-settings>=2.0.0
 # Configuration Management
 python-dotenv>=1.0.0
 
-# GitHub Integration
-GitPython>=3.1.40
-
 # Data Manipulation
 pandas>=2.1.0
 numpy>=1.24.0

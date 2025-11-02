@@ -118,16 +118,6 @@ class PromptBuilderApp(ctk.CTk):
         )
         self.generate_btn.grid(row=11, column=0, padx=SPACING["lg"], pady=SPACING["md"], sticky="ew")
 
-        self.save_btn = ctk.CTkButton(
-            self.sidebar,
-            text="💾 Save & Commit",
-            font=FONTS["body_medium"],
-            **get_button_style("success", self.theme),
-            height=DIMENSIONS["button_height"],
-            command=self._save_to_github
-        )
-        self.save_btn.grid(row=12, column=0, padx=SPACING["lg"], pady=(0, SPACING["lg"]), sticky="ew")
-
         # Version label
         self.version_label = ctk.CTkLabel(
             self.sidebar,
@@ -135,7 +125,7 @@ class PromptBuilderApp(ctk.CTk):
             font=FONTS["body_small"],
             text_color=colors["text_muted"]
         )
-        self.version_label.grid(row=13, column=0, padx=SPACING["lg"], pady=(0, SPACING["md"]))
+        self.version_label.grid(row=12, column=0, padx=SPACING["lg"], pady=(0, SPACING["md"]))
 
     def _create_main_content(self):
         """Create the main content area with tabs."""
@@ -333,13 +323,6 @@ class PromptBuilderApp(ctk.CTk):
         except Exception as e:
             self._update_status(f"Error: {str(e)}", "error")
             logger.error(f"Error generating prompt: {e}", exc_info=True)
-
-    def _save_to_github(self):
-        """Save prompt to GitHub."""
-        self._update_status("Saving to GitHub...", "warning")
-        logger.info("Save to GitHub button clicked")
-        # TODO: Implement GitHub save logic
-        self._update_status("Saved successfully!", "success")
 
     def _update_status(self, message: str, status_type: str = "success"):
         """Update the status indicator."""

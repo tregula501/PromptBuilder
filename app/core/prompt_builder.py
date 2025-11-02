@@ -18,6 +18,25 @@ from app.core.timezone_utils import format_game_time
 logger = logging.getLogger(__name__)
 
 
+def sanitize_template_input(text: str) -> str:
+    """
+    Sanitize user input to prevent template injection.
+
+    Escapes curly braces that could interfere with string formatting.
+
+    Args:
+        text: User input string
+
+    Returns:
+        Sanitized string safe for template formatting
+    """
+    if not text:
+        return ""
+
+    # Escape curly braces to prevent template injection
+    return text.replace('{', '{{').replace('}', '}}')
+
+
 class PromptBuilder:
     """Builds AI prompts for sports betting analysis."""
 
@@ -55,8 +74,36 @@ Please analyze these betting opportunities considering value, risk, and statisti
 """
 
     def build_prompt(self, prompt_config: PromptConfig, games: List[Game]) -> PromptData:
-        """Build a complete prompt from configuration and game data."""
-        logger.info(f"Building prompt for {len(games)} games")
+        """
+        Build a complete prompt from configuration and game data.
+
+        Args:
+            prompt_config: Configuration for prompt generation
+            games: List of games to include in prompt
+
+        Returns:
+            PromptData object containing generated prompt and metadata
+
+        Raises:
+            ValueError: If games list is empty or invalid
+        """
+        # Validate inputs
+        if not games:
+            raise ValueError("Cannot build prompt with empty games list. Please select at least one game.")
+
+        if not prompt_config.sports:
+            raise ValueError("At least one sport must be selected in configuration.")
+
+        # Validate that games match selected sports
+        game_sports = set(game.sport for game in games)
+        config_sports = set(prompt_config.sports)
+        unmatched_sports = game_sports - config_sports
+
+        if unmatched_sports:
+            logger.warning(f"Games include sports not in configuration: {unmatched_sports}")
+            # This is a warning, not an error, as it might be intentional
+
+        logger.info(f"Building prompt for {len(games)} games across {len(game_sports)} sports")
 
         # Format game data
         game_data_str = self._format_game_data(games, prompt_config)
@@ -77,6 +124,9 @@ Please analyze these betting opportunities considering value, risk, and statisti
         # Format template
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # Sanitize custom context to prevent template injection
+        safe_custom_context = sanitize_template_input(prompt_config.custom_context) if prompt_config.custom_context else "None provided"
+
         prompt_text = self.default_template.format(
             timestamp=timestamp,
             sports=", ".join(prompt_config.sports),  # Already strings due to use_enum_values
@@ -88,7 +138,7 @@ Please analyze these betting opportunities considering value, risk, and statisti
             additional_constraints=constraints,
             contextual_factors=contextual_factors,
             analysis_sections=analysis_sections,
-            custom_context=prompt_config.custom_context or "None provided"
+            custom_context=safe_custom_context
         )
 
         # Create PromptData object
@@ -381,8 +431,8 @@ Please analyze these betting opportunities considering value, risk, and statisti
                     decimal = 1 + (100 / abs(odd))
 
                 decimal_odds.append(decimal)
-            except:
-                logger.warning(f"Invalid odds format: {odd_str}")
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"Invalid odds format: {odd_str} - {e}")
                 continue
 
         if not decimal_odds:
@@ -393,13 +443,18 @@ Please analyze these betting opportunities considering value, risk, and statisti
         for dec in decimal_odds:
             combined_decimal *= dec
 
-        # Convert back to American
+        # Convert back to American with proper edge case handling
         if combined_decimal >= 2:
             combined_american = int((combined_decimal - 1) * 100)
             return f"+{combined_american}"
-        else:
+        elif combined_decimal > 1:
+            # Handle edge case: 1 < decimal < 2
             combined_american = int(-100 / (combined_decimal - 1))
             return str(combined_american)
+        else:
+            # Edge case: combined_decimal <= 1 (shouldn't happen with valid odds)
+            logger.warning(f"Invalid combined decimal odds: {combined_decimal}")
+            return "+100"
 
     def save_prompt(self, prompt_data: PromptData, filename: Optional[str] = None) -> Path:
         """Save generated prompt to file."""

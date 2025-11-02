@@ -6,7 +6,7 @@ import customtkinter as ctk
 from typing import Dict, List
 from datetime import datetime
 import logging
-import threading
+from concurrent.futures import ThreadPoolExecutor, Future
 
 from app.core.models import Game, SportType
 from app.core.data_fetcher import get_odds_api_client
@@ -145,6 +145,10 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         self.game_cards: List[GameCard] = []
         self.is_loading = False
 
+        # Thread pool for background operations (max 1 concurrent fetch)
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="GameFetch")
+        self.current_fetch_future: Future = None
+
         # Create UI
         self._create_ui()
 
@@ -250,25 +254,27 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
                     self._update_status("Please select at least one sport first", "error")
                     return
 
+                # Cancel any existing fetch operation
+                if self.current_fetch_future and not self.current_fetch_future.done():
+                    self.current_fetch_future.cancel()
+                    logger.info("Cancelled previous fetch operation")
+
                 # Start loading
                 self.is_loading = True
                 self.fetch_btn.configure(text="⏳ Fetching...", state="disabled")
                 self._update_status(f"Fetching games for {len(selected_sports)} sports...", "loading")
 
-                # Fetch in background thread
-                def fetch_thread():
-                    try:
-                        client = get_odds_api_client()
-                        games_dict = client.get_games_with_odds(selected_sports)
+                # Fetch in background using thread pool
+                def fetch_task():
+                    """Background task to fetch games from API."""
+                    client = get_odds_api_client()
+                    return client.get_games_with_odds(selected_sports)
 
-                        # Update UI on main thread
-                        self.after(0, lambda: self._on_games_fetched(games_dict))
+                # Submit task and store future
+                self.current_fetch_future = self.executor.submit(fetch_task)
 
-                    except Exception as e:
-                        self.after(0, lambda: self._on_fetch_error(str(e)))
-
-                thread = threading.Thread(target=fetch_thread, daemon=True)
-                thread.start()
+                # Add callback to handle completion (avoids lambda capture)
+                self.current_fetch_future.add_done_callback(self._on_fetch_complete)
 
             else:
                 self._update_status("Cannot access Sports tab", "error")
@@ -279,8 +285,27 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
             self.is_loading = False
             self.fetch_btn.configure(text="🔄 Fetch Games", state="normal")
 
+    def _on_fetch_complete(self, future: Future):
+        """
+        Handle completion of fetch task (called from background thread).
+
+        This callback is executed in the background thread, so all UI updates
+        must be scheduled on the main thread using self.after().
+        """
+        try:
+            # Get the result (raises exception if task failed)
+            games_dict = future.result()
+
+            # Schedule UI update on main thread
+            self.after(0, self._on_games_fetched, games_dict)
+
+        except Exception as e:
+            # Schedule error handling on main thread
+            error_msg = str(e)
+            self.after(0, self._on_fetch_error, error_msg)
+
     def _on_games_fetched(self, games_dict: Dict[SportType, List[Game]]):
-        """Handle successful games fetch."""
+        """Handle successful games fetch (runs on main thread)."""
         self.fetched_games = games_dict
         self.is_loading = False
         self.fetch_btn.configure(text="🔄 Fetch Games", state="normal")
@@ -300,7 +325,7 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         logger.info(f"Successfully fetched {total_games} games")
 
     def _on_fetch_error(self, error: str):
-        """Handle fetch error."""
+        """Handle fetch error (runs on main thread)."""
         self.is_loading = False
         self.fetch_btn.configure(text="🔄 Fetch Games", state="normal")
         self._update_status(f"Error: {error}", "error")
@@ -411,3 +436,17 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         for games in self.fetched_games.values():
             all_games.extend(games)
         return all_games
+
+    def destroy(self):
+        """Clean up resources before destroying the widget."""
+        # Cancel any pending fetch operations
+        if self.current_fetch_future and not self.current_fetch_future.done():
+            self.current_fetch_future.cancel()
+            logger.info("Cancelled pending fetch operation during cleanup")
+
+        # Shutdown the thread pool executor
+        self.executor.shutdown(wait=False)
+        logger.info("Thread pool executor shut down")
+
+        # Call parent destroy
+        super().destroy()

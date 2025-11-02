@@ -168,6 +168,35 @@ class PromptConfig(BaseModel):
     custom_context: Optional[str] = None
     selected_sportsbooks: List[str] = []
 
+    @validator('sports')
+    def validate_sports_not_empty(cls, v):
+        """Ensure at least one sport is selected."""
+        if not v:
+            raise ValueError("At least one sport must be selected")
+        return v
+
+    @validator('bet_types')
+    def validate_bet_types_not_empty(cls, v):
+        """Ensure at least one bet type is selected."""
+        if not v:
+            raise ValueError("At least one bet type must be selected")
+        return v
+
+    @validator('max_parlay_legs')
+    def validate_parlay_legs_range(cls, v, values):
+        """Ensure max_parlay_legs is greater than or equal to min_parlay_legs."""
+        if 'min_parlay_legs' in values and v < values['min_parlay_legs']:
+            raise ValueError(f"max_parlay_legs ({v}) must be >= min_parlay_legs ({values['min_parlay_legs']})")
+        return v
+
+    @validator('custom_context')
+    def validate_custom_context_length(cls, v):
+        """Ensure custom context doesn't exceed reasonable length."""
+        MAX_LENGTH = 5000
+        if v and len(v) > MAX_LENGTH:
+            raise ValueError(f"Custom context exceeds maximum length of {MAX_LENGTH} characters")
+        return v
+
     class Config:
         use_enum_values = True
 
