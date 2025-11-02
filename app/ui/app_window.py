@@ -142,14 +142,13 @@ class PromptBuilderApp(ctk.CTk):
             height=DIMENSIONS["button_height"] + 8,
             command=self._generate_prompt
         )
-        self.generate_btn.grid(row=11, column=0, padx=SPACING["lg"], pady=SPACING["md"], sticky="ew")
 
         # Undo/Redo button frame
         undo_redo_frame = ctk.CTkFrame(
             self.sidebar,
             fg_color="transparent"
         )
-        undo_redo_frame.grid(row=10, column=0, padx=SPACING["lg"], pady=(0, SPACING["sm"]), sticky="ew")
+        undo_redo_frame.grid(row=9, column=0, padx=SPACING["lg"], pady=(SPACING["md"], SPACING["xs"]), sticky="ew")
         undo_redo_frame.grid_columnconfigure((0, 1), weight=1)
 
         self.undo_btn = ctk.CTkButton(
@@ -184,7 +183,10 @@ class PromptBuilderApp(ctk.CTk):
             text_color=colors["text_secondary"],
             wraplength=DIMENSIONS["sidebar_width"] - (SPACING["lg"] * 2)
         )
-        self.validation_label.grid(row=10, column=0, padx=SPACING["lg"], pady=(0, SPACING["sm"]))
+        self.validation_label.grid(row=10, column=0, padx=SPACING["lg"], pady=(0, SPACING["xs"]))
+
+        # Generate button
+        self.generate_btn.grid(row=11, column=0, padx=SPACING["lg"], pady=SPACING["md"], sticky="ew")
 
         # Version label
         self.version_label = ctk.CTkLabel(
