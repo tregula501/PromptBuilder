@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 class PromptBuilderApp(ctk.CTk):
     """Main application window."""
 
+    # UI timing constants
+    STATUS_RESET_TIMEOUT_MS = 3000  # Auto-reset status message after 3 seconds
+
     def __init__(self):
         super().__init__()
 
@@ -49,6 +52,9 @@ class PromptBuilderApp(ctk.CTk):
         # Create UI elements
         self._create_sidebar()
         self._create_main_content()
+
+        # Bind keyboard shortcuts
+        self._setup_keyboard_shortcuts()
 
         logger.info("Application window initialized")
 
@@ -324,6 +330,42 @@ class PromptBuilderApp(ctk.CTk):
             self._update_status(f"Error: {str(e)}", "error")
             logger.error(f"Error generating prompt: {e}", exc_info=True)
 
+    def _setup_keyboard_shortcuts(self):
+        """Set up keyboard shortcuts for common actions."""
+        # Ctrl/Cmd+G: Generate Prompt
+        self.bind("<Control-g>", lambda event: self._generate_prompt())
+        self.bind("<Command-g>", lambda event: self._generate_prompt())  # macOS
+
+        # Ctrl/Cmd+S: Save Prompt (when in Preview tab)
+        self.bind("<Control-s>", lambda event: self._handle_save_shortcut())
+        self.bind("<Command-s>", lambda event: self._handle_save_shortcut())  # macOS
+
+        # Ctrl/Cmd+C: Already handled by system for copy, but we can add custom behavior
+        # F5: Refresh/Fetch Games
+        self.bind("<F5>", lambda event: self._handle_refresh_shortcut())
+
+        logger.info("Keyboard shortcuts initialized")
+
+    def _handle_save_shortcut(self):
+        """Handle Ctrl+S keyboard shortcut."""
+        # Save prompt if we're in the Preview tab
+        if "Preview" in self.tabs:
+            preview_tab = self.tabs["Preview"]
+            if hasattr(preview_tab, 'save_prompt'):
+                preview_tab.save_prompt()
+                self._update_status("Prompt saved!", "success")
+            else:
+                logger.warning("Preview tab doesn't have save_prompt method")
+
+    def _handle_refresh_shortcut(self):
+        """Handle F5 keyboard shortcut to refresh/fetch games."""
+        # Fetch games if we're in the Games tab
+        if "Games" in self.tabs:
+            games_tab = self.tabs["Games"]
+            if hasattr(games_tab, '_fetch_games'):
+                games_tab._fetch_games()
+                logger.info("Fetching games via F5 shortcut")
+
     def _update_status(self, message: str, status_type: str = "success"):
         """Update the status indicator."""
         colors = get_theme_colors(self.theme)
@@ -336,8 +378,8 @@ class PromptBuilderApp(ctk.CTk):
             text=f"● {message}",
             text_color=color_map.get(status_type, colors["success"])
         )
-        # Reset status after 3 seconds
-        self.after(3000, lambda: self.status_label.configure(
+        # Reset status after specified timeout
+        self.after(self.STATUS_RESET_TIMEOUT_MS, lambda: self.status_label.configure(
             text="● Ready",
             text_color=colors["success"]
         ))

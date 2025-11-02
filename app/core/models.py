@@ -22,6 +22,7 @@ class SportType(str, Enum):
     PREMIER_LEAGUE = "Premier League"
     LA_LIGA = "La Liga"
     CHAMPIONS_LEAGUE = "Champions League"
+    MLS = "MLS"
     TENNIS = "Tennis"
     MMA = "MMA"
     UFC = "UFC"

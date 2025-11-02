@@ -24,6 +24,10 @@ class OddsAPIClient:
 
     BASE_URL = "https://api.the-odds-api.com/v4"
 
+    # Rate limiting and caching constants
+    RATE_LIMIT_SECONDS = 1.0  # Minimum seconds between API requests
+    CACHE_DURATION_MINUTES = 15  # How long to cache API responses
+
     # Sport mappings for The Odds API
     SPORT_KEYS = {
         SportType.NFL: "americanfootball_nfl",
@@ -36,6 +40,7 @@ class OddsAPIClient:
         SportType.PREMIER_LEAGUE: "soccer_epl",
         SportType.LA_LIGA: "soccer_spain_la_liga",
         SportType.CHAMPIONS_LEAGUE: "soccer_uefa_champs_league",
+        SportType.MLS: "soccer_usa_mls",
         SportType.MMA: "mma_mixed_martial_arts",
         SportType.UFC: "mma_mixed_martial_arts",
     }
@@ -48,6 +53,10 @@ class OddsAPIClient:
         self._request_count = 0
         self._last_request_time = None
 
+        # Response cache: {cache_key: (response, timestamp)}
+        self._cache: Dict[str, tuple[APIResponse, datetime]] = {}
+        self._cache_duration = timedelta(minutes=self.CACHE_DURATION_MINUTES)
+
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> APIResponse:
         """Make an API request with retry logic and rate limiting."""
         if not self.api_key:
@@ -58,11 +67,11 @@ class OddsAPIClient:
                 source=DataSource.ODDS_API
             )
 
-        # Rate limiting: Wait at least 1 second between requests
+        # Rate limiting: Wait at least RATE_LIMIT_SECONDS between requests
         if self._last_request_time:
             elapsed = time.time() - self._last_request_time
-            if elapsed < 1.0:
-                time.sleep(1.0 - elapsed)
+            if elapsed < self.RATE_LIMIT_SECONDS:
+                time.sleep(self.RATE_LIMIT_SECONDS - elapsed)
 
         url = f"{self.BASE_URL}/{endpoint}"
         params = params or {}
@@ -125,7 +134,9 @@ class OddsAPIClient:
         odds_format: str = "american"
     ) -> APIResponse:
         """
-        Get odds for a specific sport.
+        Get odds for a specific sport with automatic caching.
+
+        Responses are cached for 15 minutes to reduce API calls and improve performance.
 
         Args:
             sport: Sport type to get odds for
@@ -141,13 +152,37 @@ class OddsAPIClient:
                 source=DataSource.ODDS_API
             )
 
+        # Create cache key from request parameters
+        cache_key = f"{sport_key}:{regions}:{markets}:{odds_format}"
+
+        # Check cache first
+        if cache_key in self._cache:
+            cached_response, cached_time = self._cache[cache_key]
+            age = datetime.now() - cached_time
+
+            if age < self._cache_duration:
+                logger.info(f"Using cached data for {sport_key} (age: {age.seconds}s)")
+                return cached_response
+            else:
+                # Cache expired, remove it
+                del self._cache[cache_key]
+                logger.debug(f"Cache expired for {sport_key}, fetching fresh data")
+
+        # Fetch fresh data
         params = {
             "regions": regions,
             "markets": markets,
             "oddsFormat": odds_format
         }
 
-        return self._make_request(f"sports/{sport_key}/odds", params)
+        response = self._make_request(f"sports/{sport_key}/odds", params)
+
+        # Cache successful responses only
+        if response.success:
+            self._cache[cache_key] = (response, datetime.now())
+            logger.debug(f"Cached response for {sport_key}")
+
+        return response
 
     def parse_odds_to_games(self, odds_response: APIResponse, sport: SportType) -> List[Game]:
         """
