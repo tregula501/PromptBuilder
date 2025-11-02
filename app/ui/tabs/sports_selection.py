@@ -19,12 +19,15 @@ logger = logging.getLogger(__name__)
 class SportsSelectionTab(ctk.CTkScrollableFrame):
     """Tab for selecting which sports to include in the prompt."""
 
-    def __init__(self, parent, **kwargs):
+    def __init__(self, parent, on_selection_change=None, **kwargs):
         super().__init__(parent, **kwargs)
 
         self.config = get_config()
         self.theme = self.config.get_setting("theme", "dark")
         self.colors = get_theme_colors(self.theme)
+
+        # Callback for selection changes (for undo/redo)
+        self.on_selection_change = on_selection_change
 
         # Store checkbox variables
         self.sport_vars: Dict[SportType, ctk.BooleanVar] = {}
@@ -193,6 +196,9 @@ class SportsSelectionTab(ctk.CTkScrollableFrame):
 
     def _on_sport_toggle(self, sport: SportType):
         """Handle sport checkbox toggle."""
+        # Capture old state for undo/redo
+        old_state = list(self.selected_sports)
+
         if self.sport_vars[sport].get():
             self.selected_sports.add(sport)
             logger.info(f"Selected sport: {sport.value}")
@@ -202,6 +208,11 @@ class SportsSelectionTab(ctk.CTkScrollableFrame):
 
         self._update_count()
 
+        # Record change for undo/redo
+        if self.on_selection_change:
+            new_state = list(self.selected_sports)
+            self.on_selection_change(old_state, new_state)
+
     def _update_count(self):
         """Update the selection count label."""
         count = len(self.selected_sports)
@@ -210,19 +221,35 @@ class SportsSelectionTab(ctk.CTkScrollableFrame):
 
     def _select_all(self):
         """Select all sports."""
+        # Capture old state for undo/redo
+        old_state = list(self.selected_sports)
+
         for sport, var in self.sport_vars.items():
             var.set(True)
             self.selected_sports.add(sport)
         self._update_count()
         logger.info("Selected all sports")
 
+        # Record change for undo/redo
+        if self.on_selection_change:
+            new_state = list(self.selected_sports)
+            self.on_selection_change(old_state, new_state)
+
     def _clear_all(self):
         """Clear all sports."""
+        # Capture old state for undo/redo
+        old_state = list(self.selected_sports)
+
         for sport, var in self.sport_vars.items():
             var.set(False)
         self.selected_sports.clear()
         self._update_count()
         logger.info("Cleared all sports")
+
+        # Record change for undo/redo
+        if self.on_selection_change:
+            new_state = list(self.selected_sports)
+            self.on_selection_change(old_state, new_state)
 
     def _save_preferences(self):
         """Save current selection as default preferences."""

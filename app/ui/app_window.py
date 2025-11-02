@@ -19,6 +19,7 @@ from app.ui.tabs.prompt_preview import PromptPreviewTab
 from app.core.prompt_builder import get_prompt_builder
 from app.core.data_fetcher import get_odds_api_client
 from app.core.models import PromptConfig
+from app.core.command_history import get_command_history, SelectionCommand
 
 logger = logging.getLogger(__name__)
 
@@ -49,12 +50,24 @@ class PromptBuilderApp(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
+        # Validation state
+        self.validation_state = {
+            "sports_selected": False,
+            "games_selected": False
+        }
+
+        # Command history for undo/redo
+        self.command_history = get_command_history()
+
         # Create UI elements
         self._create_sidebar()
         self._create_main_content()
 
         # Bind keyboard shortcuts
         self._setup_keyboard_shortcuts()
+
+        # Start validation check loop
+        self._start_validation_check()
 
         logger.info("Application window initialized")
 
@@ -92,6 +105,13 @@ class PromptBuilderApp(ctk.CTk):
 
         # Navigation buttons
         self.nav_buttons = {}
+        self.nav_button_icons = {
+            "Sports": "🏈",
+            "Games": "📋",
+            "Odds": "💰",
+            "Bet Config": "⚙️",
+            "Preview": "👁️",
+        }
         nav_items = [
             ("Sports", "🏈"),
             ("Games", "📋"),
@@ -123,6 +143,48 @@ class PromptBuilderApp(ctk.CTk):
             command=self._generate_prompt
         )
         self.generate_btn.grid(row=11, column=0, padx=SPACING["lg"], pady=SPACING["md"], sticky="ew")
+
+        # Undo/Redo button frame
+        undo_redo_frame = ctk.CTkFrame(
+            self.sidebar,
+            fg_color="transparent"
+        )
+        undo_redo_frame.grid(row=10, column=0, padx=SPACING["lg"], pady=(0, SPACING["sm"]), sticky="ew")
+        undo_redo_frame.grid_columnconfigure((0, 1), weight=1)
+
+        self.undo_btn = ctk.CTkButton(
+            undo_redo_frame,
+            text="↶ Undo",
+            font=FONTS["body_small"],
+            fg_color=colors["bg_tertiary"],
+            hover_color=colors["accent"],
+            height=32,
+            command=self._undo,
+            state="disabled"
+        )
+        self.undo_btn.grid(row=0, column=0, padx=(0, SPACING["xs"]), sticky="ew")
+
+        self.redo_btn = ctk.CTkButton(
+            undo_redo_frame,
+            text="↷ Redo",
+            font=FONTS["body_small"],
+            fg_color=colors["bg_tertiary"],
+            hover_color=colors["accent"],
+            height=32,
+            command=self._redo,
+            state="disabled"
+        )
+        self.redo_btn.grid(row=0, column=1, padx=(SPACING["xs"], 0), sticky="ew")
+
+        # Validation feedback label
+        self.validation_label = ctk.CTkLabel(
+            self.sidebar,
+            text="",
+            font=FONTS["body_small"],
+            text_color=colors["text_secondary"],
+            wraplength=DIMENSIONS["sidebar_width"] - (SPACING["lg"] * 2)
+        )
+        self.validation_label.grid(row=10, column=0, padx=SPACING["lg"], pady=(0, SPACING["sm"]))
 
         # Version label
         self.version_label = ctk.CTkLabel(
@@ -199,13 +261,15 @@ class PromptBuilderApp(ctk.CTk):
         # Sports Selection Tab
         self.tabs["Sports"] = SportsSelectionTab(
             self.content_area,
-            fg_color=colors["bg_primary"]
+            fg_color=colors["bg_primary"],
+            on_selection_change=lambda old, new: self.record_selection_change("sports", old, new)
         )
 
         # Game Selection Tab (NEW)
         self.tabs["Games"] = GameSelectionTab(
             self.content_area,
-            fg_color=colors["bg_primary"]
+            fg_color=colors["bg_primary"],
+            on_selection_change=lambda old, new: self.record_selection_change("games", old, new)
         )
 
         # Odds Review Tab (NEW)
@@ -262,10 +326,20 @@ class PromptBuilderApp(ctk.CTk):
         # Update nav button states
         colors = get_theme_colors(self.theme)
         for name, btn in self.nav_buttons.items():
+            # Get icon and check mark
+            icon = self.nav_button_icons.get(name, "")
+            check = ""
+            if name == "Sports" and self.validation_state["sports_selected"]:
+                check = " ✓"
+            elif name == "Games" and self.validation_state["games_selected"]:
+                check = " ✓"
+
+            # Update button appearance
+            btn_text = f"{icon}  {name}{check}"
             if name == tab_name:
-                btn.configure(fg_color=colors["accent"])
+                btn.configure(fg_color=colors["accent"], text=btn_text)
             else:
-                btn.configure(fg_color=colors["bg_tertiary"])
+                btn.configure(fg_color=colors["bg_tertiary"], text=btn_text)
 
         logger.info(f"Switched to tab: {tab_name}")
 
@@ -340,7 +414,16 @@ class PromptBuilderApp(ctk.CTk):
         self.bind("<Control-s>", lambda event: self._handle_save_shortcut())
         self.bind("<Command-s>", lambda event: self._handle_save_shortcut())  # macOS
 
-        # Ctrl/Cmd+C: Already handled by system for copy, but we can add custom behavior
+        # Ctrl/Cmd+Z: Undo
+        self.bind("<Control-z>", lambda event: self._undo())
+        self.bind("<Command-z>", lambda event: self._undo())  # macOS
+
+        # Ctrl/Cmd+Y: Redo (Windows/Linux)
+        self.bind("<Control-y>", lambda event: self._redo())
+        # Ctrl/Cmd+Shift+Z: Redo (macOS standard)
+        self.bind("<Control-Shift-Z>", lambda event: self._redo())
+        self.bind("<Command-Shift-Z>", lambda event: self._redo())  # macOS
+
         # F5: Refresh/Fetch Games
         self.bind("<F5>", lambda event: self._handle_refresh_shortcut())
 
@@ -383,6 +466,154 @@ class PromptBuilderApp(ctk.CTk):
             text="● Ready",
             text_color=colors["success"]
         ))
+
+    def _check_validation_state(self):
+        """Check if all requirements for prompt generation are met."""
+        colors = get_theme_colors(self.theme)
+
+        # Check if sports are selected
+        sports_tab = self.tabs.get("Sports")
+        sports_selected = sports_tab.get_selected_sports() if sports_tab else []
+        self.validation_state["sports_selected"] = len(sports_selected) > 0
+
+        # Check if games are selected
+        games_tab = self.tabs.get("Games")
+        games_selected = games_tab.get_selected_games() if games_tab else []
+        self.validation_state["games_selected"] = len(games_selected) > 0
+
+        # Update navigation button indicators
+        self._update_nav_indicators()
+
+        # Determine if all requirements are met
+        all_valid = all(self.validation_state.values())
+
+        # Update button state
+        if all_valid:
+            self.generate_btn.configure(
+                state="normal",
+                fg_color=colors["accent"],
+                hover_color=colors["accent_hover"]
+            )
+            self.validation_label.configure(text="✓ Ready to generate", text_color=colors["success"])
+        else:
+            self.generate_btn.configure(
+                state="disabled",
+                fg_color=colors["bg_tertiary"],
+                hover_color=colors["bg_tertiary"]
+            )
+
+            # Build helpful validation message
+            missing_requirements = []
+            if not self.validation_state["sports_selected"]:
+                missing_requirements.append("⚠ Select at least 1 sport")
+            if not self.validation_state["games_selected"]:
+                missing_requirements.append("⚠ Select at least 1 game")
+
+            validation_msg = "\n".join(missing_requirements)
+            self.validation_label.configure(text=validation_msg, text_color=colors["warning"])
+
+    def _update_nav_indicators(self):
+        """Update navigation button text with completion indicators."""
+        # Sports tab indicator
+        if "Sports" in self.nav_buttons:
+            icon = self.nav_button_icons["Sports"]
+            check = "✓" if self.validation_state["sports_selected"] else ""
+            label = f"{icon}  Sports {check}".strip()
+            # Only update if not current tab (to avoid color flickering)
+            if self.current_tab != "Sports":
+                self.nav_buttons["Sports"].configure(text=label)
+
+        # Games tab indicator
+        if "Games" in self.nav_buttons:
+            icon = self.nav_button_icons["Games"]
+            check = "✓" if self.validation_state["games_selected"] else ""
+            label = f"{icon}  Games {check}".strip()
+            if self.current_tab != "Games":
+                self.nav_buttons["Games"].configure(text=label)
+
+    def _start_validation_check(self):
+        """Start periodic validation checking."""
+        self._check_validation_state()
+        self._update_undo_redo_buttons()
+        # Check every 500ms
+        self.after(500, self._start_validation_check)
+
+    def _undo(self):
+        """Undo the last command."""
+        if self.command_history.can_undo():
+            self.command_history.undo()
+            self._update_undo_redo_buttons()
+            self._update_status("Undone", "success")
+            logger.info("Undo executed")
+        else:
+            logger.debug("Cannot undo: no commands in history")
+
+    def _redo(self):
+        """Redo the next command."""
+        if self.command_history.can_redo():
+            self.command_history.redo()
+            self._update_undo_redo_buttons()
+            self._update_status("Redone", "success")
+            logger.info("Redo executed")
+        else:
+            logger.debug("Cannot redo: at end of history")
+
+    def _update_undo_redo_buttons(self):
+        """Update undo/redo button states based on command history."""
+        colors = get_theme_colors(self.theme)
+
+        # Update undo button
+        if self.command_history.can_undo():
+            self.undo_btn.configure(state="normal")
+        else:
+            self.undo_btn.configure(state="disabled")
+
+        # Update redo button
+        if self.command_history.can_redo():
+            self.redo_btn.configure(state="normal")
+        else:
+            self.redo_btn.configure(state="disabled")
+
+    def record_selection_change(self, tab_type: str, old_state, new_state):
+        """
+        Record a selection change for undo/redo.
+
+        Args:
+            tab_type: "sports" or "games"
+            old_state: Previous selection state
+            new_state: New selection state
+        """
+        # Get the appropriate tab widget
+        if tab_type == "sports":
+            tab_widget = self.tabs.get("Sports")
+        elif tab_type == "games":
+            tab_widget = self.tabs.get("Games")
+        else:
+            logger.warning(f"Unknown tab type for selection change: {tab_type}")
+            return
+
+        if not tab_widget:
+            logger.warning(f"Tab widget not found for type: {tab_type}")
+            return
+
+        # Don't record if states are identical
+        if old_state == new_state:
+            return
+
+        # Create and execute command (execute will add it to history)
+        command = SelectionCommand(tab_widget, old_state, new_state, tab_type)
+        # Don't execute - the change has already been made, just add to history
+        # We'll manually add to history
+        self.command_history.history.append(command)
+        self.command_history.current_index += 1
+
+        # Limit history size
+        if len(self.command_history.history) > self.command_history.MAX_HISTORY_SIZE:
+            self.command_history.history.pop(0)
+            self.command_history.current_index -= 1
+
+        self._update_undo_redo_buttons()
+        logger.debug(f"Recorded {tab_type} selection change")
 
 
 if __name__ == "__main__":

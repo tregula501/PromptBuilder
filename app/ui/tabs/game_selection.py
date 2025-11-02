@@ -13,6 +13,7 @@ from app.core.data_fetcher import get_odds_api_client
 from app.core.odds_utils import get_odds_summary, format_game_summary
 from app.core.config import get_config
 from app.core.timezone_utils import format_game_time
+from app.core.session_state import get_session_state
 from app.ui.styles import (
     COLORS, FONTS, SPACING, DIMENSIONS,
     get_theme_colors, get_frame_style, get_button_style
@@ -131,12 +132,15 @@ class GameCard(ctk.CTkFrame):
 class GameSelectionTab(ctk.CTkScrollableFrame):
     """Tab for fetching and selecting live games."""
 
-    def __init__(self, parent, **kwargs):
+    def __init__(self, parent, on_selection_change=None, **kwargs):
         super().__init__(parent, **kwargs)
 
         self.config = get_config()
         self.theme = self.config.get_setting("theme", "dark")
         self.colors = get_theme_colors(self.theme)
+
+        # Callback for selection changes (for undo/redo)
+        self.on_selection_change = on_selection_change
 
         # State
         self.fetched_games: Dict[SportType, List[Game]] = {}
@@ -144,6 +148,9 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         self.selected_game_keys: set = set()  # Track unique keys to prevent duplicates
         self.game_cards: List[GameCard] = []
         self.is_loading = False
+
+        # Filter state
+        self.search_filter = ""  # Search text for filtering games
 
         # Thread pool for background operations (max 1 concurrent fetch)
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="GameFetch")
@@ -230,9 +237,48 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         )
         self.selection_count_label.grid(row=0, column=1, padx=SPACING["lg"], sticky="e")
 
+        # Search/Filter Section
+        filter_frame = ctk.CTkFrame(self, **get_frame_style("card", self.theme))
+        filter_frame.grid(row=1, column=0, padx=SPACING["xl"], pady=(0, SPACING["md"]), sticky="ew")
+        filter_frame.grid_columnconfigure(1, weight=1)
+
+        # Search icon/label
+        search_label = ctk.CTkLabel(
+            filter_frame,
+            text="🔍 Search:",
+            font=FONTS["body_medium"],
+            text_color=self.colors["text_primary"]
+        )
+        search_label.grid(row=0, column=0, padx=SPACING["lg"], pady=SPACING["md"], sticky="w")
+
+        # Search entry
+        self.search_entry = ctk.CTkEntry(
+            filter_frame,
+            placeholder_text="Filter by team name...",
+            font=FONTS["body_medium"],
+            fg_color=self.colors["bg_tertiary"],
+            border_color=self.colors["accent"],
+            text_color=self.colors["text_primary"],
+            placeholder_text_color=self.colors["text_secondary"]
+        )
+        self.search_entry.grid(row=0, column=1, padx=SPACING["md"], pady=SPACING["md"], sticky="ew")
+        self.search_entry.bind("<KeyRelease>", self._on_search_changed)
+
+        # Clear search button
+        clear_search_btn = ctk.CTkButton(
+            filter_frame,
+            text="✕",
+            font=FONTS["body_medium"],
+            **get_button_style("secondary", self.theme),
+            width=40,
+            height=DIMENSIONS["button_height"],
+            command=self._clear_search
+        )
+        clear_search_btn.grid(row=0, column=2, padx=SPACING["lg"], pady=SPACING["md"])
+
         # Games container
         self.games_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.games_container.grid(row=1, column=0, padx=SPACING["xl"], pady=SPACING["md"], sticky="ew")
+        self.games_container.grid(row=2, column=0, padx=SPACING["xl"], pady=SPACING["md"], sticky="ew")
         self.games_container.grid_columnconfigure(0, weight=1)
 
     def _fetch_games(self):
@@ -320,6 +366,9 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         # Display games
         self._display_games()
 
+        # Restore previous selections from session
+        self._restore_session_state()
+
         # Update status
         self._update_status(f"✓ Fetched {total_games} games", "success")
         logger.info(f"Successfully fetched {total_games} games")
@@ -332,7 +381,7 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         logger.error(f"Failed to fetch games: {error}")
 
     def _display_games(self):
-        """Display fetched games as cards."""
+        """Display fetched games as cards, filtered by search criteria."""
         # Clear existing cards
         for card in self.game_cards:
             card.destroy()
@@ -340,22 +389,34 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
 
         # Create new cards
         row = 0
+        total_shown = 0
         for sport, games in self.fetched_games.items():
             if not games:
                 continue
 
-            # Sport header
+            # Filter games based on search criteria
+            filtered_games = [game for game in games if self._game_matches_filter(game)]
+
+            if not filtered_games:
+                continue  # Skip sport if no games match filter
+
+            # Sport header with filtered count
+            header_text = f"━━━ {sport} ({len(filtered_games)} games"
+            if len(filtered_games) < len(games):
+                header_text += f" of {len(games)}"
+            header_text += ") ━━━"
+
             sport_header = ctk.CTkLabel(
                 self.games_container,
-                text=f"━━━ {sport} ({len(games)} games) ━━━",
+                text=header_text,
                 font=FONTS["heading_small"],
                 text_color=self.colors["accent"]
             )
             sport_header.grid(row=row, column=0, pady=(SPACING["lg"], SPACING["md"]), sticky="w")
             row += 1
 
-            # Game cards
-            for game in games:
+            # Game cards (only filtered games)
+            for game in filtered_games:
                 card = GameCard(
                     self.games_container,
                     game,
@@ -365,9 +426,66 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
                 card.grid(row=row, column=0, pady=SPACING["sm"], sticky="ew")
                 self.game_cards.append(card)
                 row += 1
+                total_shown += 1
+
+        # Update status if filtering
+        if self.search_filter:
+            total_games = sum(len(games) for games in self.fetched_games.values())
+            if total_shown < total_games:
+                self._update_status(f"Showing {total_shown} of {total_games} games", "info")
+
+    def _game_matches_filter(self, game: Game) -> bool:
+        """
+        Check if a game matches the current search filter.
+
+        Args:
+            game: Game to check
+
+        Returns:
+            bool: True if game matches filter (or no filter active), False otherwise
+        """
+        # If no filter, show all games
+        if not self.search_filter:
+            return True
+
+        # Case-insensitive search
+        search_lower = self.search_filter.lower()
+
+        # Check team names
+        if search_lower in game.home_team.lower():
+            return True
+        if search_lower in game.away_team.lower():
+            return True
+
+        # Check sport
+        if search_lower in str(game.sport).lower():
+            return True
+
+        # Check venue
+        if game.venue and search_lower in game.venue.lower():
+            return True
+
+        return False
+
+    def _on_search_changed(self, event=None):
+        """Handle search text change."""
+        self.search_filter = self.search_entry.get().strip()
+        # Redisplay games with filter applied
+        self._display_games()
+        logger.debug(f"Search filter updated: '{self.search_filter}'")
+
+    def _clear_search(self):
+        """Clear the search filter."""
+        self.search_entry.delete(0, 'end')
+        self.search_filter = ""
+        self._display_games()
+        logger.debug("Search filter cleared")
 
     def _on_game_selected(self, game: Game, selected: bool):
         """Handle game selection change."""
+        # Capture old state for undo/redo
+        old_state = list(self.selected_games)
+
         game_key = game.get_unique_key()
 
         if selected:
@@ -381,7 +499,41 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
                 self.selected_game_keys.remove(game_key)
 
         self._update_selection_count()
+        self._save_session_state()
         logger.debug(f"Game {'selected' if selected else 'deselected'}: {format_game_summary(game)}")
+
+        # Record change for undo/redo
+        if self.on_selection_change:
+            new_state = list(self.selected_games)
+            self.on_selection_change(old_state, new_state)
+
+    def _save_session_state(self):
+        """Save current selections to session state."""
+        session = get_session_state()
+        session.set("selected_game_keys", list(self.selected_game_keys))
+
+    def _restore_session_state(self):
+        """Restore selections from session state."""
+        session = get_session_state()
+        saved_keys = session.get("selected_game_keys", [])
+
+        if not saved_keys:
+            return
+
+        # Restore selections for games that were previously selected
+        restored_count = 0
+        for card in self.game_cards:
+            game_key = card.game.get_unique_key()
+            if game_key in saved_keys:
+                card.set_selected(True)
+                if game_key not in self.selected_game_keys:
+                    self.selected_games.append(card.game)
+                    self.selected_game_keys.add(game_key)
+                    restored_count += 1
+
+        if restored_count > 0:
+            self._update_selection_count()
+            logger.info(f"Restored {restored_count} game selections from session")
 
     def _select_all(self):
         """Select all fetched games."""
@@ -393,6 +545,7 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
                 self.selected_game_keys.add(game_key)
 
         self._update_selection_count()
+        self._save_session_state()
         logger.info(f"Selected all {len(self.game_cards)} games")
 
     def _clear_all(self):
@@ -403,6 +556,7 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
         self.selected_games.clear()
         self.selected_game_keys.clear()
         self._update_selection_count()
+        self._save_session_state()
         logger.info("Cleared all game selections")
 
     def _update_selection_count(self):
@@ -429,6 +583,42 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
     def get_selected_games(self) -> List[Game]:
         """Get list of selected games."""
         return list(self.selected_games)
+
+    def set_selected_games(self, games: List[Game]):
+        """
+        Set selected games programmatically (for undo/redo).
+
+        Args:
+            games: List of games to select
+        """
+        # Clear current selections
+        self.selected_games.clear()
+        self.selected_game_keys.clear()
+
+        # Update game cards to reflect new selection
+        for card in self.game_cards:
+            card.set_selected(False)
+
+        # Set new selections
+        for game in games:
+            game_key = self._get_game_key(game)
+            if game_key not in self.selected_game_keys:
+                self.selected_game_keys.add(game_key)
+                self.selected_games.append(game)
+
+                # Update corresponding card if it exists
+                for card in self.game_cards:
+                    if self._get_game_key(card.game) == game_key:
+                        card.set_selected(True)
+                        break
+
+        # Update selection count
+        self._update_selection_count()
+
+        # Save to session
+        self._save_session_state()
+
+        logger.info(f"Set selected games: {len(games)} games")
 
     def get_all_games(self) -> List[Game]:
         """Get all fetched games."""

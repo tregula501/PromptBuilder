@@ -80,6 +80,9 @@ Thumbs.db
 prompts/temp/
 *.bak
 
+# Session state (local user data)
+.promptbuilder_session.json
+
 # Don't ignore example prompts in templates
 !templates/*.txt
 !templates/*.md
