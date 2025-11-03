@@ -6,7 +6,10 @@ import customtkinter as ctk
 from typing import Dict, List, Set
 import logging
 
-from app.core.models import BetType, RiskLevel, AnalysisType
+from app.core.models import (
+    BetType, RiskLevel, AnalysisType,
+    MarketCategory, MARKET_GROUPS, BET_TYPE_DISPLAY_NAMES
+)
 from app.core.config import get_config
 from app.core.timezone_utils import get_common_us_timezones, get_system_timezone
 from app.ui.styles import (
@@ -246,53 +249,168 @@ class BetConfigurationTab(ctk.CTkScrollableFrame):
         return start_row + 1
 
     def _create_bet_types_section(self, start_row: int) -> int:
-        """Create bet types selection section."""
+        """Create comprehensive bet types selection section with categories."""
         frame = ctk.CTkFrame(self, **get_frame_style("card", self.theme))
         frame.grid(row=start_row, column=0, padx=SPACING["xl"], pady=SPACING["md"], sticky="ew")
-        frame.grid_columnconfigure((0, 1), weight=1)
+        frame.grid_columnconfigure(0, weight=1)
 
         # Title
         title = ctk.CTkLabel(
             frame,
-            text="Bet Types to Include",
+            text="Markets & Bet Types to Include",
             font=FONTS["heading_small"],
             text_color=self.colors["accent"]
         )
-        title.grid(row=0, column=0, columnspan=2, padx=SPACING["lg"], pady=(SPACING["lg"], SPACING["sm"]), sticky="w")
+        title.grid(row=0, column=0, padx=SPACING["lg"], pady=(SPACING["lg"], SPACING["sm"]), sticky="w")
 
-        # Bet type checkboxes
-        bet_types = [
-            (BetType.MONEYLINE, "Moneyline", "Straight win/loss bets"),
-            (BetType.SPREAD, "Spread", "Point spread bets"),
-            (BetType.TOTALS, "Totals (Over/Under)", "Combined score over/under"),
-            (BetType.PARLAY, "Parlay", "Multiple selections combined"),
-            (BetType.PROP, "Player Props", "Player performance bets"),
-            (BetType.TEASER, "Teasers", "Adjusted point spreads"),
-        ]
+        # Description
+        desc = ctk.CTkLabel(
+            frame,
+            text="Select which betting markets to include in your prompt (80+ options organized by category)",
+            font=FONTS["body_small"],
+            text_color=self.colors["text_secondary"]
+        )
+        desc.grid(row=1, column=0, padx=SPACING["lg"], pady=(0, SPACING["md"]), sticky="w")
 
-        for idx, (bet_type, label, description) in enumerate(bet_types, start=1):
-            var = ctk.BooleanVar(value=bet_type in [BetType.MONEYLINE, BetType.SPREAD, BetType.TOTALS])
-            self.bet_type_vars[bet_type] = var
+        current_row = 2
 
+        # Create each market category
+        for category in MarketCategory:
+            bet_types_in_category = MARKET_GROUPS.get(category, [])
+            if not bet_types_in_category:
+                continue
+
+            # Create category frame
+            current_row = self._create_market_category(
+                frame,
+                category,
+                bet_types_in_category,
+                current_row
+            )
+
+        return start_row + 1
+
+    def _create_market_category(
+        self,
+        parent_frame: ctk.CTkFrame,
+        category: MarketCategory,
+        bet_types: List[BetType],
+        start_row: int
+    ) -> int:
+        """Create a single market category with expandable content."""
+
+        # Category header frame
+        header_frame = ctk.CTkFrame(parent_frame, fg_color=self.colors["bg_secondary"], corner_radius=6)
+        header_frame.grid(row=start_row, column=0, padx=SPACING["lg"], pady=(SPACING["md"], 0), sticky="ew")
+        header_frame.grid_columnconfigure(1, weight=1)
+
+        # Category title with emoji
+        category_icons = {
+            MarketCategory.BASIC: "📊",
+            MarketCategory.ALTERNATE_LINES: "↕️",
+            MarketCategory.PERIOD: "🕐",
+            MarketCategory.SOCCER: "⚽",
+            MarketCategory.PLAYER_PROPS_NFL: "🏈",
+            MarketCategory.PLAYER_PROPS_NBA: "🏀",
+            MarketCategory.PLAYER_PROPS_MLB: "⚾",
+            MarketCategory.PLAYER_PROPS_NHL: "🏒",
+        }
+
+        icon = category_icons.get(category, "📌")
+
+        category_label = ctk.CTkLabel(
+            header_frame,
+            text=f"{icon}  {category.value}",
+            font=FONTS["body_large"],
+            text_color=self.colors["text_primary"]
+        )
+        category_label.grid(row=0, column=0, padx=SPACING["md"], pady=SPACING["sm"], sticky="w")
+
+        # Count label
+        count_label = ctk.CTkLabel(
+            header_frame,
+            text=f"({len(bet_types)} markets)",
+            font=FONTS["body_small"],
+            text_color=self.colors["text_secondary"]
+        )
+        count_label.grid(row=0, column=1, padx=SPACING["sm"], pady=SPACING["sm"], sticky="w")
+
+        # Select All button for this category
+        select_all_btn = ctk.CTkButton(
+            header_frame,
+            text="Select All",
+            font=FONTS["body_small"],
+            **get_button_style("secondary", self.theme),
+            width=80,
+            height=24,
+            command=lambda: self._select_all_in_category(bet_types)
+        )
+        select_all_btn.grid(row=0, column=2, padx=SPACING["sm"], pady=SPACING["sm"])
+
+        # Clear All button for this category
+        clear_all_btn = ctk.CTkButton(
+            header_frame,
+            text="Clear All",
+            font=FONTS["body_small"],
+            **get_button_style("secondary", self.theme),
+            width=80,
+            height=24,
+            command=lambda: self._clear_all_in_category(bet_types)
+        )
+        clear_all_btn.grid(row=0, column=3, padx=(0, SPACING["sm"]), pady=SPACING["sm"])
+
+        # Content frame for checkboxes
+        content_frame = ctk.CTkFrame(parent_frame, fg_color="transparent")
+        content_frame.grid(row=start_row + 1, column=0, padx=SPACING["lg"], pady=(0, SPACING["sm"]), sticky="ew")
+        content_frame.grid_columnconfigure((0, 1), weight=1)
+
+        # Create checkboxes for each bet type
+        default_enabled = {BetType.MONEYLINE, BetType.SPREAD, BetType.TOTALS}
+
+        for idx, bet_type in enumerate(bet_types):
             col = idx % 2
-            row = 1 + (idx // 2)
+            row = idx // 2
+
+            # Get display name
+            display_name = BET_TYPE_DISPLAY_NAMES.get(bet_type, bet_type.value)
+
+            # Create variable if not exists
+            if bet_type not in self.bet_type_vars:
+                var = ctk.BooleanVar(value=bet_type in default_enabled)
+                self.bet_type_vars[bet_type] = var
+
+                # Set initial state
+                if var.get():
+                    self.selected_bet_types.add(bet_type)
 
             checkbox = ctk.CTkCheckBox(
-                frame,
-                text=label,
-                variable=var,
-                font=FONTS["body_medium"],
+                content_frame,
+                text=display_name,
+                variable=self.bet_type_vars[bet_type],
+                font=FONTS["body_small"],
                 text_color=self.colors["text_primary"],
                 fg_color=self.colors["accent"],
                 command=lambda bt=bet_type: self._on_bet_type_toggle(bt)
             )
-            checkbox.grid(row=row, column=col, padx=SPACING["lg"], pady=SPACING["xs"], sticky="w")
+            checkbox.grid(row=row, column=col, padx=SPACING["md"], pady=SPACING["xs"], sticky="w")
 
-            # Set initial state
-            if var.get():
+        return start_row + 2
+
+    def _select_all_in_category(self, bet_types: List[BetType]):
+        """Select all bet types in a category."""
+        for bet_type in bet_types:
+            if bet_type in self.bet_type_vars:
+                self.bet_type_vars[bet_type].set(True)
                 self.selected_bet_types.add(bet_type)
+        logger.info(f"Selected all bet types in category ({len(bet_types)} types)")
 
-        return start_row + 1
+    def _clear_all_in_category(self, bet_types: List[BetType]):
+        """Clear all bet types in a category."""
+        for bet_type in bet_types:
+            if bet_type in self.bet_type_vars:
+                self.bet_type_vars[bet_type].set(False)
+                self.selected_bet_types.discard(bet_type)
+        logger.info(f"Cleared all bet types in category ({len(bet_types)} types)")
 
     def _create_risk_section(self, start_row: int) -> int:
         """Create risk tolerance section."""

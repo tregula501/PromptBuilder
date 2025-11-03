@@ -305,6 +305,19 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
                     self.current_fetch_future.cancel()
                     logger.info("Cancelled previous fetch operation")
 
+                # Get selected bet types/markets from Bet Config tab
+                markets_str = None
+                if "Bet Config" in app.tabs:
+                    bet_config_tab = app.tabs["Bet Config"]
+                    bet_config = bet_config_tab.get_configuration()
+                    selected_bet_types = bet_config.get("bet_types", [])
+
+                    if selected_bet_types:
+                        # Convert BetType enums to API market string
+                        from app.core.data_fetcher import OddsAPIClient
+                        markets_str = OddsAPIClient.bet_types_to_markets(selected_bet_types)
+                        logger.info(f"Using markets: {markets_str}")
+
                 # Start loading
                 self.is_loading = True
                 self.fetch_btn.configure(text="⏳ Fetching...", state="disabled")
@@ -314,7 +327,7 @@ class GameSelectionTab(ctk.CTkScrollableFrame):
                 def fetch_task():
                     """Background task to fetch games from API."""
                     client = get_odds_api_client()
-                    return client.get_games_with_odds(selected_sports)
+                    return client.get_games_with_odds(selected_sports, markets=markets_str)
 
                 # Submit task and store future
                 self.current_fetch_future = self.executor.submit(fetch_task)

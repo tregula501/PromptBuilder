@@ -229,13 +229,27 @@ class OddsAPIClient:
         logger.info(f"Parsed {len(games)} games for {sport}")
         return games
 
-    def get_games_with_odds(self, sports: List[SportType]) -> Dict[SportType, List[Game]]:
-        """Get games with odds for multiple sports."""
+    def get_games_with_odds(
+        self,
+        sports: List[SportType],
+        markets: Optional[str] = None
+    ) -> Dict[SportType, List[Game]]:
+        """
+        Get games with odds for multiple sports.
+
+        Args:
+            sports: List of sports to fetch
+            markets: Comma-separated API market names (e.g., "h2h,spreads,player_points")
+                     If None, defaults to "h2h,spreads,totals"
+        """
         results = {}
 
+        # Use provided markets or default
+        markets_param = markets if markets else "h2h,spreads,totals"
+
         for sport in sports:
-            logger.info(f"Fetching odds for {sport}")
-            odds_response = self.get_odds(sport)
+            logger.info(f"Fetching odds for {sport} with markets: {markets_param}")
+            odds_response = self.get_odds(sport, markets=markets_param)
 
             if odds_response.success:
                 games = self.parse_odds_to_games(odds_response, sport)
