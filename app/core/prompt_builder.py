@@ -10,7 +10,8 @@ import logging
 from app.core.config import get_config
 from app.core.models import (
     Game, PromptConfig, PromptData, BetType,
-    Parlay, SportType, RiskLevel, AnalysisType
+    Parlay, SportType, RiskLevel, AnalysisType,
+    MarketCategory, MARKET_GROUPS, BET_TYPE_DISPLAY_NAMES
 )
 from app.core.odds_utils import calculate_implied_probability
 from app.core.timezone_utils import format_game_time
@@ -121,6 +122,9 @@ Please analyze these betting opportunities considering value, risk, and statisti
         # Build dynamic analysis sections
         analysis_sections = self._build_analysis_sections(prompt_config)
 
+        # Build market-specific guidance
+        market_guidance = self._build_market_guidance(prompt_config)
+
         # Format template
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -138,6 +142,7 @@ Please analyze these betting opportunities considering value, risk, and statisti
             additional_constraints=constraints,
             contextual_factors=contextual_factors,
             analysis_sections=analysis_sections,
+            market_guidance=market_guidance,
             custom_context=safe_custom_context
         )
 
@@ -404,6 +409,70 @@ Please analyze these betting opportunities considering value, risk, and statisti
    - Highlight which bets to avoid and why""")
 
         return "\n\n".join(sections)
+
+    def _build_market_guidance(self, config: PromptConfig) -> str:
+        """Build market-specific analysis guidance based on selected bet types."""
+        guidance_sections = []
+
+        # Check which market categories are selected
+        has_player_props = any(
+            bt in config.bet_types
+            for category in [MarketCategory.PLAYER_PROPS_NFL, MarketCategory.PLAYER_PROPS_NBA,
+                            MarketCategory.PLAYER_PROPS_MLB, MarketCategory.PLAYER_PROPS_NHL]
+            for bt in MARKET_GROUPS.get(category, [])
+        )
+
+        has_alternate_lines = any(bt in config.bet_types for bt in MARKET_GROUPS.get(MarketCategory.ALTERNATE_LINES, []))
+        has_period_markets = any(bt in config.bet_types for bt in MARKET_GROUPS.get(MarketCategory.PERIOD, []))
+        has_soccer_markets = any(bt in config.bet_types for bt in MARKET_GROUPS.get(MarketCategory.SOCCER, []))
+
+        # Player Props Guidance
+        if has_player_props:
+            guidance_sections.append("""
+PLAYER PROPS ANALYSIS:
+   - Analyze individual player matchups and recent performance
+   - Consider usage rates, minutes/touches, and role in game plan
+   - Factor in opposing defense strengths/weaknesses vs position
+   - Review player's performance in similar game situations
+   - Account for pace of play and projected game script
+   - Check for correlations between player props and game total""")
+
+        # Alternate Lines Guidance
+        if has_alternate_lines:
+            guidance_sections.append("""
+ALTERNATE LINES STRATEGY:
+   - Compare value across different line options
+   - Identify where alternate lines offer better risk/reward
+   - Consider using alternate lines to construct correlated parlays
+   - Assess whether moving the line is worth the odds adjustment
+   - Look for discrepancies in alt line pricing between books""")
+
+        # Period/Quarter Betting Guidance
+        if has_period_markets:
+            guidance_sections.append("""
+PERIOD BETTING CONSIDERATIONS:
+   - Analyze team tendencies in specific periods/quarters
+   - Consider pace and scoring patterns throughout the game
+   - Account for rest and substitution patterns
+   - Evaluate starting lineups vs bench strength for period bets
+   - Review historical performance in 1H/2H or specific quarters
+   - Factor in coaching adjustments and game management""")
+
+        # Soccer-Specific Markets Guidance
+        if has_soccer_markets:
+            guidance_sections.append("""
+SOCCER MARKETS ANALYSIS:
+   - For 3-Way betting: Assess draw probability based on team styles
+   - For BTTS: Analyze offensive/defensive strengths of both teams
+   - For Draw No Bet: Consider as safer alternative to straight win
+   - Review head-to-head scoring history and clean sheet rates
+   - Factor in home/away form and defensive records
+   - Consider game importance and expected approach (attacking vs defensive)""")
+
+        if guidance_sections:
+            return "\n" + "\n".join(guidance_sections)
+        else:
+            return ""
 
     def calculate_parlay_odds(self, selections: List[str]) -> str:
         """

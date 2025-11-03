@@ -26,6 +26,7 @@ ANALYSIS REQUEST:
 Please analyze the above betting opportunities considering the following aspects:
 
 {analysis_sections}
+{market_guidance}
 
 ════════════════════════════════════════════════════════════════
 

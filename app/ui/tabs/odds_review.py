@@ -6,7 +6,7 @@ import customtkinter as ctk
 from typing import List, Dict
 import logging
 
-from app.core.models import Game, BetType, OddsData
+from app.core.models import Game, BetType, OddsData, BET_TYPE_DISPLAY_NAMES, MarketCategory, MARKET_GROUPS
 from app.core.odds_utils import (
     group_odds_by_bet_type,
     compare_odds_across_sportsbooks,
@@ -51,10 +51,14 @@ class BetTypeSection(ctk.CTkFrame):
         header_frame.grid(row=0, column=0, padx=SPACING["md"], pady=SPACING["md"], sticky="ew")
         header_frame.grid_columnconfigure(1, weight=1)
 
+        # Get friendly display name and category icon
+        display_name = self._get_display_name()
+        icon = self._get_market_icon()
+
         # Bet type icon and name
         bet_type_label = ctk.CTkLabel(
             header_frame,
-            text=f"📊 {self.bet_type.upper()}",
+            text=f"{icon} {display_name}",
             font=FONTS["heading_small"],
             text_color=self.colors["accent"],
             anchor="w"
@@ -108,6 +112,40 @@ class BetTypeSection(ctk.CTkFrame):
             odds_label.grid(row=row, column=1, sticky="w", padx=SPACING["md"], pady=SPACING["xs"])
 
             row += 1
+
+    def _get_display_name(self) -> str:
+        """Get friendly display name for this bet type."""
+        # Try to match bet_type string to BetType enum
+        try:
+            # Convert string to BetType enum (bet_type is stored as string in grouped_odds)
+            bet_type_enum = BetType(self.bet_type)
+            return BET_TYPE_DISPLAY_NAMES.get(bet_type_enum, self.bet_type.upper())
+        except (ValueError, KeyError):
+            return self.bet_type.upper()
+
+    def _get_market_icon(self) -> str:
+        """Get icon for this market type based on category."""
+        try:
+            bet_type_enum = BetType(self.bet_type)
+
+            # Check which category this bet type belongs to
+            for category, bet_types in MARKET_GROUPS.items():
+                if bet_type_enum in bet_types:
+                    category_icons = {
+                        MarketCategory.BASIC: "📊",
+                        MarketCategory.ALTERNATE_LINES: "↕️",
+                        MarketCategory.PERIOD: "🕐",
+                        MarketCategory.SOCCER: "⚽",
+                        MarketCategory.PLAYER_PROPS_NFL: "🏈",
+                        MarketCategory.PLAYER_PROPS_NBA: "🏀",
+                        MarketCategory.PLAYER_PROPS_MLB: "⚾",
+                        MarketCategory.PLAYER_PROPS_NHL: "🏒",
+                    }
+                    return category_icons.get(category, "📌")
+
+            return "📊"  # Default
+        except (ValueError, KeyError):
+            return "📊"
 
 
 class GameOddsPanel(ctk.CTkFrame):
