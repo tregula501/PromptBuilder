@@ -2,8 +2,8 @@
     "selected_sports": [
         "Soccer"
     ],
-    "max_combined_odds": 400,
-    "min_parlay_legs": 2,
+    "max_combined_odds": 800,
+    "min_parlay_legs": 3,
     "max_parlay_legs": 10,
     "bet_types": {
         "moneyline": true,
@@ -24,20 +24,17 @@
         "injury_impact": false
     },
     "ai_model": "Generic/Multiple",
-    "risk_tolerance": "Medium",
+    "risk_tolerance": "High",
     "sportsbooks": [],
     "custom_prompt_template": "",
     "theme": "dark",
     "last_data_source": "api",
     "include_stats": true,
-    "include_injuries": false,
+    "include_injuries": true,
     "include_weather": false,
     "include_trends": true,
     "selected_sportsbooks": [
-        "DraftKings",
-        "FanDuel",
-        "Bet365",
-        "BetMGM"
+        "DraftKings"
     ],
     "custom_context": "",
     "timezone": "America/New_York"

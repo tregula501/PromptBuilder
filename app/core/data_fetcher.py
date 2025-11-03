@@ -32,6 +32,7 @@ class OddsAPIClient:
     SPORT_KEYS = {
         SportType.NFL: "americanfootball_nfl",
         SportType.NBA: "basketball_nba",
+        SportType.WNBA: "basketball_wnba",
         SportType.MLB: "baseball_mlb",
         SportType.NHL: "icehockey_nhl",
         SportType.NCAAF: "americanfootball_ncaaf",
@@ -125,6 +126,33 @@ class OddsAPIClient:
     def get_available_sports(self) -> APIResponse:
         """Get list of available sports."""
         return self._make_request("sports")
+
+    @staticmethod
+    def bet_types_to_markets(bet_types: List['BetType']) -> str:
+        """
+        Convert a list of BetType enums to API market parameter string.
+
+        Args:
+            bet_types: List of BetType enums
+
+        Returns:
+            Comma-separated string of API market names
+        """
+        from app.core.models import BET_TYPE_TO_API_MARKET, BetType
+
+        # Filter out client-side only bet types (parlay, teaser, live)
+        client_side_types = {BetType.PARLAY, BetType.TEASER, BetType.LIVE, BetType.OVER_UNDER}
+
+        markets = []
+        for bet_type in bet_types:
+            if bet_type in client_side_types:
+                continue  # Skip client-side only types
+
+            api_market = BET_TYPE_TO_API_MARKET.get(bet_type)
+            if api_market and api_market not in markets:
+                markets.append(api_market)
+
+        return ",".join(markets) if markets else "h2h,spreads,totals"  # Default fallback
 
     def get_odds(
         self,

@@ -68,6 +68,7 @@ class SportsSelectionTab(ctk.CTkScrollableFrame):
         self._create_sport_category("American Sports", [
             SportType.NFL,
             SportType.NBA,
+            SportType.WNBA,
             SportType.MLB,
             SportType.NHL,
             SportType.NCAAF,
