@@ -42,12 +42,88 @@ class OddsAPIAdapter(DataAdapter):
     Handles conversion of The Odds API JSON responses to Game models.
     """
 
-    # Bet market mappings
+    # Bet market mappings (API market key → BetType enum)
     MARKET_TO_BET_TYPE = {
+        # Basic markets
         "h2h": BetType.MONEYLINE,
         "spreads": BetType.SPREAD,
         "totals": BetType.TOTALS,
-        "outrights": BetType.FUTURES
+
+        # Alternate lines
+        "alternate_spreads": BetType.ALTERNATE_SPREADS,
+        "alternate_totals": BetType.ALTERNATE_TOTALS,
+        "alternate_team_totals": BetType.ALTERNATE_TEAM_TOTALS,
+
+        # Soccer markets
+        "h2h_3_way": BetType.H2H_3_WAY,
+        "btts": BetType.BTTS,
+        "draw_no_bet": BetType.DRAW_NO_BET,
+
+        # Period markets - Quarters
+        "h2h_q1": BetType.H2H_Q1,
+        "h2h_q2": BetType.H2H_Q2,
+        "h2h_q3": BetType.H2H_Q3,
+        "h2h_q4": BetType.H2H_Q4,
+        "spreads_q1": BetType.SPREADS_Q1,
+        "spreads_q2": BetType.SPREADS_Q2,
+        "spreads_q3": BetType.SPREADS_Q3,
+        "spreads_q4": BetType.SPREADS_Q4,
+        "totals_q1": BetType.TOTALS_Q1,
+        "totals_q2": BetType.TOTALS_Q2,
+        "totals_q3": BetType.TOTALS_Q3,
+        "totals_q4": BetType.TOTALS_Q4,
+
+        # Period markets - Halves
+        "h2h_h1": BetType.H2H_H1,
+        "h2h_h2": BetType.H2H_H2,
+        "spreads_h1": BetType.SPREADS_H1,
+        "spreads_h2": BetType.SPREADS_H2,
+        "totals_h1": BetType.TOTALS_H1,
+        "totals_h2": BetType.TOTALS_H2,
+
+        # Period markets - Hockey
+        "h2h_p1": BetType.H2H_P1,
+        "h2h_p2": BetType.H2H_P2,
+        "h2h_p3": BetType.H2H_P3,
+
+        # Period markets - Baseball
+        "h2h_1st_1_innings": BetType.H2H_1ST_1_INNINGS,
+        "h2h_1st_3_innings": BetType.H2H_1ST_3_INNINGS,
+        "h2h_1st_5_innings": BetType.H2H_1ST_5_INNINGS,
+        "h2h_1st_7_innings": BetType.H2H_1ST_7_INNINGS,
+
+        # Player props - NFL/NCAAF
+        "player_pass_yds": BetType.PLAYER_PASS_YDS,
+        "player_pass_tds": BetType.PLAYER_PASS_TDS,
+        "player_rush_yds": BetType.PLAYER_RUSH_YDS,
+        "player_rush_tds": BetType.PLAYER_RUSH_TDS,
+        "player_receptions": BetType.PLAYER_RECEPTIONS,
+        "player_reception_yds": BetType.PLAYER_RECEPTION_YDS,
+        "player_anytime_td": BetType.PLAYER_ANYTIME_TD,
+
+        # Player props - NBA/WNBA/NCAAB
+        "player_points": BetType.PLAYER_POINTS,
+        "player_rebounds": BetType.PLAYER_REBOUNDS,
+        "player_assists": BetType.PLAYER_ASSISTS,
+        "player_threes": BetType.PLAYER_THREES,
+        "player_blocks": BetType.PLAYER_BLOCKS,
+        "player_steals": BetType.PLAYER_STEALS,
+        "player_double_double": BetType.PLAYER_DOUBLE_DOUBLE,
+        "player_triple_double": BetType.PLAYER_TRIPLE_DOUBLE,
+
+        # Player props - MLB
+        "batter_home_runs": BetType.BATTER_HOME_RUNS,
+        "batter_hits": BetType.BATTER_HITS,
+        "batter_total_bases": BetType.BATTER_TOTAL_BASES,
+        "batter_rbis": BetType.BATTER_RBIS,
+        "pitcher_strikeouts": BetType.PITCHER_STRIKEOUTS,
+        "pitcher_hits_allowed": BetType.PITCHER_HITS_ALLOWED,
+        "pitcher_earned_runs": BetType.PITCHER_EARNED_RUNS,
+
+        # Player props - NHL
+        "player_goals": BetType.PLAYER_GOALS,
+        "player_anytime_goal_scorer": BetType.PLAYER_GOAL_SCORER_ANYTIME,
+        "player_shots_on_goal": BetType.PLAYER_SHOTS_ON_GOAL,
     }
 
     def adapt_to_games(self, raw_data: Any, sport: SportType) -> List[Game]:
