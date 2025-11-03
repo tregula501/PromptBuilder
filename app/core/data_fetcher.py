@@ -128,15 +128,16 @@ class OddsAPIClient:
         return self._make_request("sports")
 
     @staticmethod
-    def bet_types_to_markets(bet_types: List['BetType']) -> str:
+    def bet_types_to_markets(bet_types: List['BetType'], sport: Optional[SportType] = None) -> str:
         """
-        Convert a list of BetType enums to API market parameter string.
+        Convert a list of BetType enums to API market parameter string, filtered by sport.
 
         Args:
             bet_types: List of BetType enums
+            sport: Optional sport type to filter markets by
 
         Returns:
-            Comma-separated string of API market names
+            Comma-separated string of API market names valid for the sport
         """
         from app.core.models import BET_TYPE_TO_API_MARKET, BetType
 
@@ -150,9 +151,83 @@ class OddsAPIClient:
 
             api_market = BET_TYPE_TO_API_MARKET.get(bet_type)
             if api_market and api_market not in markets:
+                # Filter by sport if specified
+                if sport and not OddsAPIClient._is_market_valid_for_sport(api_market, sport):
+                    continue  # Skip markets not valid for this sport
                 markets.append(api_market)
 
         return ",".join(markets) if markets else "h2h,spreads,totals"  # Default fallback
+
+    @staticmethod
+    def _is_market_valid_for_sport(market: str, sport: SportType) -> bool:
+        """
+        Check if a market is valid for a given sport.
+
+        Args:
+            market: API market name
+            sport: Sport type
+
+        Returns:
+            True if the market is valid for the sport
+        """
+        # Define sport categories
+        football_sports = {SportType.NFL, SportType.NCAAF}
+        basketball_sports = {SportType.NBA, SportType.WNBA, SportType.NCAAB}
+        baseball_sports = {SportType.MLB}
+        hockey_sports = {SportType.NHL}
+        soccer_sports = {SportType.SOCCER, SportType.PREMIER_LEAGUE, SportType.LA_LIGA,
+                        SportType.CHAMPIONS_LEAGUE, SportType.MLS}
+
+        # Basic markets work for all sports
+        basic_markets = {"h2h", "spreads", "totals"}
+        if market in basic_markets:
+            return True
+
+        # Alternate lines work for most sports
+        if market in {"alternate_spreads", "alternate_totals", "alternate_team_totals"}:
+            return True
+
+        # Soccer-specific markets
+        if market in {"h2h_3_way", "btts", "draw_no_bet"}:
+            return sport in soccer_sports
+
+        # Quarter markets (basketball and football)
+        if market.startswith(("h2h_q", "spreads_q", "totals_q")):
+            return sport in (football_sports | basketball_sports)
+
+        # Half markets (all major sports)
+        if market.startswith(("h2h_h", "spreads_h", "totals_h")):
+            return sport not in soccer_sports  # Halves work for most sports except soccer
+
+        # Period markets (hockey only)
+        if market.startswith("h2h_p") or market in {"h2h_p1", "h2h_p2", "h2h_p3"}:
+            return sport in hockey_sports
+
+        # Inning markets (baseball only)
+        if "innings" in market:
+            return sport in baseball_sports
+
+        # Player props - Football
+        if market in {"player_pass_yds", "player_pass_tds", "player_rush_yds", "player_rush_tds",
+                     "player_receptions", "player_reception_yds", "player_anytime_td"}:
+            return sport in football_sports
+
+        # Player props - Basketball
+        if market in {"player_points", "player_rebounds", "player_assists", "player_threes",
+                     "player_blocks", "player_steals", "player_double_double", "player_triple_double"}:
+            return sport in basketball_sports
+
+        # Player props - Baseball
+        if market in {"batter_home_runs", "batter_hits", "batter_total_bases", "batter_rbis",
+                     "pitcher_strikeouts", "pitcher_hits_allowed", "pitcher_earned_runs"}:
+            return sport in baseball_sports
+
+        # Player props - Hockey
+        if market in {"player_goals", "player_anytime_goal_scorer", "player_shots_on_goal"}:
+            return sport in hockey_sports
+
+        # If we don't recognize it, allow it (defensive programming)
+        return True
 
     def get_odds(
         self,
@@ -232,22 +307,27 @@ class OddsAPIClient:
     def get_games_with_odds(
         self,
         sports: List[SportType],
-        markets: Optional[str] = None
+        markets: Optional[str] = None,
+        bet_types: Optional[List['BetType']] = None
     ) -> Dict[SportType, List[Game]]:
         """
         Get games with odds for multiple sports.
 
         Args:
             sports: List of sports to fetch
-            markets: Comma-separated API market names (e.g., "h2h,spreads,player_points")
-                     If None, defaults to "h2h,spreads,totals"
+            markets: Comma-separated API market names (legacy, for backward compatibility)
+            bet_types: List of BetType enums (recommended - filters per sport)
         """
         results = {}
 
-        # Use provided markets or default
-        markets_param = markets if markets else "h2h,spreads,totals"
-
         for sport in sports:
+            # If bet_types provided, convert to markets for THIS specific sport
+            if bet_types:
+                markets_param = self.bet_types_to_markets(bet_types, sport)
+            # Otherwise use provided markets string or default
+            else:
+                markets_param = markets if markets else "h2h,spreads,totals"
+
             logger.info(f"Fetching odds for {sport} with markets: {markets_param}")
             odds_response = self.get_odds(sport, markets=markets_param)
 
