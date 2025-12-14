@@ -1,0 +1,95 @@
+services:
+  # VPN Container - Routes all stream traffic through VPN
+  # Supports both PIA regions AND custom .ovpn files
+  # To use custom .ovpn: set VPN_SERVICE_PROVIDER=custom in .env and place vpn.ovpn in ./vpn-config/
+  vpn:
+    image: qmcgaw/gluetun:latest
+    container_name: iptv-vpn
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      # VPN Provider - use "private internet access" or "custom" for .ovpn files
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-private internet access}
+      # PIA credentials (used when VPN_SERVICE_PROVIDER=private internet access)
+      - OPENVPN_USER=${PIA_USERNAME}
+      - OPENVPN_PASSWORD=${PIA_PASSWORD}
+      # PIA region - change this to switch regions (e.g., Poland, UK London, US East)
+      - SERVER_REGIONS=${VPN_REGION:-Poland}
+      - VPN_TYPE=openvpn
+      - OPENVPN_PROTOCOL=udp
+      # Custom .ovpn file path (only used when VPN_SERVICE_PROVIDER=custom)
+      - OPENVPN_CUSTOM_CONFIG=${OPENVPN_CUSTOM_CONFIG:-}
+      # Proxy settings
+      - HTTPPROXY=on
+      - HTTPPROXY_LOG=on
+      - FIREWALL_OUTBOUND_SUBNETS=192.168.154.0/24,172.20.0.0/16
+    volumes:
+      # Mount custom VPN config directory - place vpn.ovpn here for custom configs
+      - ./vpn-config:/gluetun/custom
+    ports:
+      - "8888:8888"
+    networks:
+      - iptv-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://ip-api.com"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Backend API - Node.js/Express
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: iptv-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DATABASE_PATH=/app/data/iptv.db
+      - JWT_SECRET=${JWT_SECRET}
+      - M3U_URL=${M3U_URL}
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - VPN_PROXY_HOST=vpn
+      - VPN_PROXY_PORT=8888
+      - CORS_ORIGIN=${CORS_ORIGIN}
+    volumes:
+      - ./backend/data:/app/data
+    ports:
+      - "4000:4000"
+    networks:
+      - iptv-network
+    depends_on:
+      vpn:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend - React SPA served by nginx
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${API_URL}
+    container_name: iptv-frontend
+    ports:
+      - "8080:80"
+    networks:
+      - iptv-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  iptv-network:
+    driver: bridge

@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  discord-bot:
+    build: .
+    container_name: discord-gpt-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GPT_MODEL=${GPT_MODEL:-gpt-5.1-2025-11-13}
+      - TZ=America/New_York
+    # Optional: Mount logs directory if you want to persist logs
+    # volumes:
+    #   - ./logs:/app/logs
+    # Resource limits (optional but recommended)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M

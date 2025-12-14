@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  betting-prompt-builder:
+    build: .
+    container_name: betting-prompt-builder
+    restart: unless-stopped
+    environment:
+      - ODDS_API_KEY=${ODDS_API_KEY}
+      - NODE_ENV=production
+    ports:
+      - "3050:3000"
