@@ -1,11 +1,11 @@
-# Discord GPT-5.1 Bot
+# Discord GPT Bot
 
-A Discord bot powered by OpenAI's GPT-5.1 that responds to mentions with AI-generated answers.
+A Discord bot powered by OpenAI's GPT-5.2 Instant that responds to mentions with AI-generated answers.
 
 ## Features
 
 - Responds to @mentions in all channels
-- Uses OpenAI's GPT-5.1 model (gpt-5.1-2025-11-13)
+- Uses OpenAI's GPT-5.2 Instant model (gpt-5.2-instant-2025-12-11) - optimized for fast responses
 - Shows typing indicator while generating responses
 - Robust error handling with user-friendly messages
 - Fully containerized with Docker
@@ -15,7 +15,7 @@ A Discord bot powered by OpenAI's GPT-5.1 that responds to mentions with AI-gene
 
 - Docker and Docker Compose installed
 - Discord account with permissions to create bots
-- OpenAI API key with access to GPT-5.1
+- OpenAI API key with access to GPT-5.2 Instant
 
 ## Setup Instructions
 
@@ -51,16 +51,32 @@ A Discord bot powered by OpenAI's GPT-5.1 that responds to mentions with AI-gene
 
 ### 4. Configure Environment Variables
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edit `.env` and add your credentials:
+1. Create a `.env` file and add your credentials:
    ```
    DISCORD_BOT_TOKEN=your_actual_discord_token_here
    OPENAI_API_KEY=your_actual_openai_key_here
-   GPT_MODEL=gpt-5.1-2025-11-13
+   GPT_MODEL=gpt-5.2-2025-12-11
+   ```
+
+2. Optional cost/latency tuning:
+   ```
+   # Cost/latency controls
+   MAX_OUTPUT_TOKENS=350
+   TIMEOUT_SECONDS=30
+   # Note: some models (including some GPT-5.x variants) may not support temperature.
+   # Leave unset unless you know your model supports it.
+   # TEMPERATURE=0.3
+
+   # Web search (off by default)
+   ENABLE_WEB_SEARCH=false
+
+   # Optional in-memory response cache (off by default; enabling may store response text in memory briefly)
+   ENABLE_RESPONSE_CACHE=false
+   CACHE_TTL_SECONDS=900
+   CACHE_MAX_ENTRIES=256
+
+   # Backpressure / stability
+   OPENAI_CONCURRENCY=3
    ```
 
 ### 5. Run the Bot
@@ -76,6 +92,22 @@ docker-compose logs -f
 
 # Stop the bot
 docker-compose down
+```
+
+#### Dev Mode (auto-reload on code changes)
+
+If you're actively editing `bot.py`, you can run with the dev compose override. This bind-mounts
+your local code into the container and restarts the bot process when files change:
+
+```bash
+# Build once, then run with dev overrides (recommended for local development)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+# Follow logs
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f
+
+# Stop
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 ```
 
 #### Using Docker Directly
@@ -108,7 +140,7 @@ Once the bot is running and invited to your server, simply mention it in any cha
 
 The bot will:
 1. Show a typing indicator
-2. Process your question with GPT-5.1
+2. Process your question with GPT-5.2 Instant
 3. Reply with an AI-generated answer
 
 ## Troubleshooting
@@ -145,7 +177,6 @@ discord-gpt-bot/
 ├── requirements.txt       # Python dependencies
 ├── Dockerfile            # Container configuration
 ├── docker-compose.yml    # Docker Compose setup
-├── .env.example          # Environment variable template
 ├── .dockerignore         # Docker build exclusions
 └── README.md            # This file
 ```
@@ -158,15 +189,23 @@ discord-gpt-bot/
 |----------|----------|---------|-------------|
 | `DISCORD_BOT_TOKEN` | Yes | - | Your Discord bot token |
 | `OPENAI_API_KEY` | Yes | - | Your OpenAI API key |
-| `GPT_MODEL` | No | `gpt-5.1-2025-11-13` | OpenAI model to use |
+| `GPT_MODEL` | No | `gpt-5.2-2025-12-11` | OpenAI model to use (GPT-5.2 for optimal performance) |
+| `MAX_OUTPUT_TOKENS` | No | `350` | Hard cap for output tokens (lower = cheaper/faster) |
+| `TIMEOUT_SECONDS` | No | `30` | OpenAI request timeout |
+| `TEMPERATURE` | No | `0.3` | Sampling temperature (lower = more deterministic) |
+| `ENABLE_WEB_SEARCH` | No | `false` | Enable web search tool (only used for time-sensitive questions) |
+| `ENABLE_RESPONSE_CACHE` | No | `false` | Cache successful responses in memory briefly (opt-in) |
+| `CACHE_TTL_SECONDS` | No | `900` | Cache TTL in seconds |
+| `CACHE_MAX_ENTRIES` | No | `256` | Max cached entries |
+| `OPENAI_CONCURRENCY` | No | `3` | Max concurrent OpenAI requests (backpressure) |
 
 ### Customization
 
 You can customize the bot by editing `bot.py`:
 
 - **System prompt**: Modify the system message in `get_gpt_response()` to change the bot's personality
-- **Max tokens**: Adjust `max_tokens` parameter to control response length
-- **Temperature**: Change `temperature` (0.0-2.0) to make responses more creative or focused
+- **Max output tokens**: Adjust `MAX_OUTPUT_TOKENS` to control response length
+- **Temperature**: Change `TEMPERATURE` (0.0-2.0) to make responses more creative or focused
 
 ## Security Notes
 

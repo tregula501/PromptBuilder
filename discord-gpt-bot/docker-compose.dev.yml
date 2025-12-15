@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  discord-bot:
+    # Dev mode:
+    # - Mount local source into the container so edits reflect immediately
+    # - Auto-restart the bot process when Python files change
+    volumes:
+      - ./:/app
+    environment:
+      # Windows/Docker Desktop bind mounts sometimes don't emit file events reliably.
+      # Force polling so changes are always detected.
+      - WATCHFILES_FORCE_POLLING=true
+    command: sh -c 'watchfiles "python bot.py"'
+

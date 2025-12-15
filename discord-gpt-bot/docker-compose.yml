@@ -10,7 +10,7 @@ services:
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GPT_MODEL=${GPT_MODEL:-gpt-5.1-2025-11-13}
+      - GPT_MODEL=${GPT_MODEL:-gpt-5.2-2025-12-11}
       - TZ=America/New_York
     # Optional: Mount logs directory if you want to persist logs
     # volumes:
