@@ -93,6 +93,12 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
 
   let effectiveBetTypes = Array.isArray(selectedBetTypes) ? [...selectedBetTypes] : [];
 
+  const promptMode = String(parlayPreferences?.promptMode || 'standard').toLowerCase(); // 'standard' | 'compact'
+  const outputFormat = String(parlayPreferences?.outputFormat || 'markdown').toLowerCase(); // 'markdown' | 'json'
+  const requireCitations = parlayPreferences?.requireCitations !== false; // default true
+  const lookbackGames = clampInt(parlayPreferences?.lookbackGames, 3, 20, 10);
+  const injuryFreshnessHours = clampInt(parlayPreferences?.injuryFreshnessHours, 6, 168, 24);
+
   const lines = [];
 
   // Group games by sport
@@ -114,10 +120,19 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
     effectiveBetTypes = effectiveBetTypes.filter(bt => bt !== 'player_props');
   }
 
-  lines.push('Analyze the following matchups and provide your top betting recommendations with confidence ratings:');
-  lines.push('');
-  lines.push('IMPORTANT: Use the betting math framework below to calculate expected value for each recommendation.');
-  lines.push('');
+  if (promptMode === 'compact') {
+    lines.push('Analyze the following matchups and provide top betting recommendations with confidence ratings.');
+    lines.push('Rules: do not guess unknowns; verify facts with current sources; compute implied probability, true probability, and EV for each pick.');
+    lines.push(`Use recent form window: last ${lookbackGames} games/matches (or closest available).`);
+    lines.push(`Injuries/lineups must be updated within the last ${injuryFreshnessHours} hours.`);
+    lines.push('');
+  } else {
+    lines.push('Analyze the following matchups and provide your top betting recommendations with confidence ratings:');
+    lines.push('');
+    lines.push('IMPORTANT: Use the betting math framework below to calculate expected value for each recommendation.');
+    lines.push(`RECENT FORM WINDOW: Use the last ${lookbackGames} games/matches (or closest available sample).`);
+    lines.push('');
+  }
 
   for (const [sportKey, games] of Object.entries(gamesBySport)) {
     const sportName = getSportDisplayName(sportKey);
@@ -187,11 +202,13 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
         lines.push('BEST VALUE SUMMARY:');
         for (const [marketType, outcomes] of Object.entries(oddsComparison)) {
           for (const [outcomeName, books] of Object.entries(outcomes)) {
-            if (books.length > 1) {
-              // Find best odds
-              const best = books.reduce((best, current) => {
-                return current.odds > best.odds ? current : best;
-              });
+            if (!books?.length) continue;
+
+            // Find best odds among available books (higher is always better for the bettor in American odds)
+            const best = books.reduce((best, current) => (current.odds > best.odds ? current : best));
+
+            // Only surface when there is actual choice (2+ books), unless compact mode (where summaries are more valuable)
+            if (books.length > 1 || promptMode === 'compact') {
               lines.push(`  ${marketType} - ${outcomeName}: ${best.book} ${formatOdds(best.odds)} ⭐ BEST VALUE`);
             }
           }
@@ -267,32 +284,34 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
 
   // Add betting math framework
   lines.push('BETTING MATH FRAMEWORK:');
-  lines.push('For each bet recommendation, calculate and include:');
-  lines.push('');
-  lines.push('1. Implied Probability:');
-  lines.push('   - Negative odds (-X): Implied % = X / (X + 100) × 100');
-  lines.push('   - Positive odds (+X): Implied % = 100 / (X + 100) × 100');
-  lines.push('   - Example: -110 = 110/(110+100) = 52.38% implied probability');
-  lines.push('   - Example: +150 = 100/(150+100) = 40.00% implied probability');
-  lines.push('');
-  lines.push('2. True Probability Assessment:');
-  lines.push('   - Based on your analysis, what is the ACTUAL win probability?');
-  lines.push('   - Compare true probability vs implied probability to find value');
-  lines.push('   - Only recommend if true probability > implied probability');
-  lines.push('');
-  lines.push('3. Expected Value (EV) Calculation:');
-  lines.push('   - EV = (True Probability × Win Amount) - (Lose Probability × Bet Amount)');
-  lines.push('   - Positive EV = Value bet (recommend)');
-  lines.push('   - Negative EV = Bad bet (avoid)');
-  lines.push('   - Example: True prob 55% at -110 odds:');
-  lines.push('     * Win: $90.91 profit on $100 bet');
-  lines.push('     * Lose: -$100');
-  lines.push('     * EV = (0.55 × $90.91) - (0.45 × $100) = $50.00 - $45.00 = +$5.00 ✅');
-  lines.push('');
-  lines.push('4. Break-Even Percentage:');
-  lines.push('   - For -110 odds, need to win 52.38% to break even');
-  lines.push('   - For +150 odds, need to win 40% to break even');
-  lines.push('   - Only recommend if your true probability exceeds break-even %');
+  lines.push('For each recommendation, include implied probability, your assessed true probability, and expected value (EV).');
+  if (promptMode !== 'compact') {
+    lines.push('');
+    lines.push('1. Implied Probability:');
+    lines.push('   - Negative odds (-X): Implied % = X / (X + 100) × 100');
+    lines.push('   - Positive odds (+X): Implied % = 100 / (X + 100) × 100');
+    lines.push('   - Example: -110 = 110/(110+100) = 52.38% implied probability');
+    lines.push('   - Example: +150 = 100/(150+100) = 40.00% implied probability');
+    lines.push('');
+    lines.push('2. True Probability Assessment:');
+    lines.push('   - Based on your analysis, what is the ACTUAL win probability?');
+    lines.push('   - Compare true probability vs implied probability to find value');
+    lines.push('   - Only recommend if true probability > implied probability');
+    lines.push('');
+    lines.push('3. Expected Value (EV) Calculation:');
+    lines.push('   - EV = (True Probability × Win Amount) - (Lose Probability × Bet Amount)');
+    lines.push('   - Positive EV = Value bet (recommend)');
+    lines.push('   - Negative EV = Bad bet (avoid)');
+    lines.push('   - Example: True prob 55% at -110 odds:');
+    lines.push('     * Win: $90.91 profit on $100 bet');
+    lines.push('     * Lose: -$100');
+    lines.push('     * EV = (0.55 × $90.91) - (0.45 × $100) = $50.00 - $45.00 = +$5.00 ✅');
+    lines.push('');
+    lines.push('4. Break-Even Percentage:');
+    lines.push('   - For -110 odds, need to win 52.38% to break even');
+    lines.push('   - For +150 odds, need to win 40% to break even');
+    lines.push('   - Only recommend if your true probability exceeds break-even %');
+  }
   lines.push('');
 
   // Add lineup verification instructions for team sports
@@ -300,35 +319,50 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
 
   if (hasTeamSports) {
     lines.push('CRITICAL - LINEUP VERIFICATION REQUIRED:');
-    lines.push('Before making ANY player-specific recommendations (player props, individual performances, etc.):');
-    lines.push('1. Verify the current starting lineup for each team');
-    lines.push('2. Confirm each player\'s status (Active, Questionable, Doubtful, Out, IR)');
-    lines.push('3. Check for recent injury reports and practice participation');
-    lines.push('4. DO NOT recommend props for players who are Out, on IR, or unlikely to play');
-    lines.push('5. For Questionable players, note the uncertainty and recommend alternatives');
-    lines.push('');
-    lines.push('If you cannot verify a player\'s current status, state this clearly and avoid recommending bets involving that player.');
-    lines.push('');
+    if (promptMode === 'compact') {
+      lines.push(`Verify starters/injuries within the last ${injuryFreshnessHours} hours. Do not recommend player-specific bets if status cannot be verified.`);
+      lines.push('');
+    } else {
+      lines.push('Before making ANY player-specific recommendations (player props, individual performances, etc.):');
+      lines.push('1. Verify the current starting lineup for each team');
+      lines.push('2. Confirm each player\'s status (Active, Questionable, Doubtful, Out, IR)');
+      lines.push('3. Check for recent injury reports and practice participation');
+      lines.push('4. DO NOT recommend props for players who are Out, on IR, or unlikely to play');
+      lines.push('5. For Questionable players, note the uncertainty and recommend alternatives');
+      lines.push('');
+      lines.push('If you cannot verify a player\'s current status, state this clearly and avoid recommending bets involving that player.');
+      lines.push('');
+    }
   }
 
   // Add data freshness instructions
   lines.push('DATA FRESHNESS REQUIREMENTS:');
-  lines.push('Before making recommendations, verify the recency of all information:');
-  lines.push('1. Only use injury/lineup data updated within the last 24 hours');
-  lines.push('2. For each key fact, note when it was last reported (e.g., "as of Nov 30")');
-  lines.push('3. If data appears stale or undated, explicitly state this uncertainty');
-  lines.push('4. Cross-reference multiple sources when possible to confirm current status');
-  lines.push('');
+  if (promptMode === 'compact') {
+    lines.push('- Use only current info; label key facts with timestamps; if uncertain, say so explicitly.');
+    lines.push('');
+  } else {
+    lines.push('Before making recommendations, verify the recency of all information:');
+    lines.push(`1. Only use injury/lineup data updated within the last ${injuryFreshnessHours} hours`);
+    lines.push('2. For each key fact, note when it was last reported (e.g., "as of Nov 30")');
+    lines.push('3. If data appears stale or undated, explicitly state this uncertainty');
+    lines.push('4. Cross-reference multiple sources when possible to confirm current status');
+    lines.push('');
+  }
 
   // Enhanced odds comparison instructions
   if (selectedSportsbooks.length > 1) {
     lines.push('IMPORTANT - Odds Comparison & Line Shopping:');
-    lines.push(`Compare odds across all ${selectedSportsbooks.length} selected sportsbooks for each bet.`);
-    lines.push('For each recommended bet, identify which sportsbook offers the best value.');
-    lines.push('Include odds comparison in your analysis (e.g., "DraftKings -110 vs FanDuel -105 - FanDuel offers 5-point advantage").');
-    lines.push('Highlight when there are significant differences (5+ points) between sportsbooks.');
-    lines.push('Note: Even small differences in odds can significantly impact long-term profitability.');
-    lines.push('');
+    if (promptMode === 'compact') {
+      lines.push(`Compare odds across all ${selectedSportsbooks.length} selected sportsbooks and pick the best line for each recommendation.`);
+      lines.push('');
+    } else {
+      lines.push(`Compare odds across all ${selectedSportsbooks.length} selected sportsbooks for each bet.`);
+      lines.push('For each recommended bet, identify which sportsbook offers the best value.');
+      lines.push('Include odds comparison in your analysis (e.g., "DraftKings -110 vs FanDuel -105 - FanDuel offers 5-point advantage").');
+      lines.push('Highlight when there are significant differences (5+ points) between sportsbooks.');
+      lines.push('Note: Even small differences in odds can significantly impact long-term profitability.');
+      lines.push('');
+    }
   }
 
   // Add bet type restrictions with strong emphasis
@@ -364,31 +398,38 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
   if (betStyle === 'Parlay') {
     lines.push('PARLAY CONSTRUCTION GUIDELINES:');
     lines.push('');
-    lines.push('1. Correlation Analysis:');
-    lines.push('   - AVOID highly correlated bets in same parlay:');
-    lines.push('     * Team A ML + Team A spread (highly correlated)');
-    lines.push('     * Team A ML + Over (moderately correlated - if team wins, more likely to go over)');
-    lines.push('     * Player prop + Team total (correlated)');
-    lines.push('   - PREFER uncorrelated bets:');
-    lines.push('     * Different games');
-    lines.push('     * Different bet types from different games');
-    lines.push('     * Independent outcomes');
-    lines.push('');
-    lines.push('2. Same Game Parlay (SGP) Considerations:');
-    lines.push('   - SGPs often have worse odds due to correlation');
-    lines.push('   - Only recommend if value is exceptional');
-    lines.push('   - Example of good SGP: Team A -3.5 + Under 230.5 (if expecting low-scoring win)');
-    lines.push('');
-    lines.push('3. Cross-Game Parlays:');
-    lines.push('   - Better value typically');
-    lines.push('   - Less correlation risk');
-    lines.push('   - Can mix different sports for diversification');
-    lines.push('');
-    lines.push('4. Leg Selection Strategy:');
-    lines.push('   - Mix favorites and underdogs (don\'t stack all favorites)');
-    lines.push('   - Target 55-60% true probability per leg');
-    lines.push('   - For 3-leg parlay: Need ~18% combined probability to be profitable at typical odds');
-    lines.push('');
+    if (promptMode === 'compact') {
+      lines.push('- Avoid highly correlated legs; prefer uncorrelated legs across different games.');
+      lines.push('- Only use SGP/SGPx if value is exceptional; otherwise prefer cross-game parlays.');
+      lines.push('- Explain correlation risk for any legs from the same game.');
+      lines.push('');
+    } else {
+      lines.push('1. Correlation Analysis:');
+      lines.push('   - AVOID highly correlated bets in same parlay:');
+      lines.push('     * Team A ML + Team A spread (highly correlated)');
+      lines.push('     * Team A ML + Over (moderately correlated - if team wins, more likely to go over)');
+      lines.push('     * Player prop + Team total (correlated)');
+      lines.push('   - PREFER uncorrelated bets:');
+      lines.push('     * Different games');
+      lines.push('     * Different bet types from different games');
+      lines.push('     * Independent outcomes');
+      lines.push('');
+      lines.push('2. Same Game Parlay (SGP) Considerations:');
+      lines.push('   - SGPs often have worse odds due to correlation');
+      lines.push('   - Only recommend if value is exceptional');
+      lines.push('   - Example of good SGP: Team A -3.5 + Under 230.5 (if expecting low-scoring win)');
+      lines.push('');
+      lines.push('3. Cross-Game Parlays:');
+      lines.push('   - Better value typically');
+      lines.push('   - Less correlation risk');
+      lines.push('   - Can mix different sports for diversification');
+      lines.push('');
+      lines.push('4. Leg Selection Strategy:');
+      lines.push('   - Mix favorites and underdogs (don\'t stack all favorites)');
+      lines.push('   - Target 55-60% true probability per leg');
+      lines.push('   - For 3-leg parlay: Need ~18% combined probability to be profitable at typical odds');
+      lines.push('');
+    }
   }
 
   // Final instructions based on bet style
@@ -448,23 +489,30 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
 
   // Add bankroll management guidance
   lines.push('BANKROLL MANAGEMENT:');
-  lines.push('1. Unit Sizing:');
-  lines.push('   - 1 unit = 1% of total bankroll (standard)');
-  lines.push('   - High confidence (★★★★★): 2-3 units');
-  lines.push('   - Medium confidence (★★★☆☆): 1 unit');
-  lines.push('   - Low confidence (★★☆☆☆): 0.5 units');
-  lines.push('   - Speculative (★☆☆☆☆): 0.25 units or skip');
-  lines.push('');
-  lines.push('2. Parlay Sizing:');
-  lines.push('   - Parlays should be smaller units than straight bets');
-  lines.push('   - 3-leg parlay: 0.5-1 unit max');
-  lines.push('   - 4+ leg parlay: 0.25-0.5 unit max');
-  lines.push('   - Higher variance = smaller bet size');
-  lines.push('');
-  lines.push('3. Risk Management:');
-  lines.push('   - Never bet more than 5% of bankroll on single bet');
-  lines.push('   - Limit total daily exposure to 10-15% of bankroll');
-  lines.push('');
+  if (promptMode === 'compact') {
+    lines.push('- Suggest unit sizing proportional to confidence (default: 1u = 1% bankroll).');
+    lines.push('- Parlays should be smaller than straight bets due to variance.');
+    lines.push('- Keep per-bet exposure reasonable; call out high-variance plays.');
+    lines.push('');
+  } else {
+    lines.push('1. Unit Sizing:');
+    lines.push('   - 1 unit = 1% of total bankroll (standard)');
+    lines.push('   - High confidence (★★★★★): 2-3 units');
+    lines.push('   - Medium confidence (★★★☆☆): 1 unit');
+    lines.push('   - Low confidence (★★☆☆☆): 0.5 units');
+    lines.push('   - Speculative (★☆☆☆☆): 0.25 units or skip');
+    lines.push('');
+    lines.push('2. Parlay Sizing:');
+    lines.push('   - Parlays should be smaller units than straight bets');
+    lines.push('   - 3-leg parlay: 0.5-1 unit max');
+    lines.push('   - 4+ leg parlay: 0.25-0.5 unit max');
+    lines.push('   - Higher variance = smaller bet size');
+    lines.push('');
+    lines.push('3. Risk Management:');
+    lines.push('   - Never bet more than 5% of bankroll on single bet');
+    lines.push('   - Limit total daily exposure to 10-15% of bankroll');
+    lines.push('');
+  }
 
   // Add risk level guidance
   const riskLevel = parlayPreferences.riskLevel || 'average';
@@ -520,7 +568,7 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
     lines.push('IMPORTANT - Calculating Parlay Odds:');
     lines.push('1. Convert each leg\'s American odds to decimal:');
     lines.push('   - Positive odds (+X): decimal = (X / 100) + 1');
-    lines.push('   - Negative odds (-X): decimal = (100 / X) + 1');
+    lines.push('   - Negative odds (-X): decimal = (100 / abs(X)) + 1');
     lines.push('   Example: -110 = (100 / 110) + 1 = 1.909');
     lines.push('   Example: +150 = (150 / 100) + 1 = 2.500');
     lines.push('2. Multiply all decimal odds together');
@@ -530,38 +578,76 @@ function generatePrompt(selectedGames, selectedSportsbooks, selectedBetTypes, pa
     lines.push('');
   }
 
-  // Enhanced recommendation format
-  lines.push('RECOMMENDATION FORMAT:');
-  lines.push('For each bet, provide in this structure:');
-  lines.push('');
-  lines.push('[BET TYPE] - [TEAM/PLAYER] - [LINE] @ [SPORTSBOOK]');
-  lines.push('Odds: [ODDS] | Implied Probability: [%] | True Probability: [%] | EV: [+/-$X.XX]');
-  lines.push('Confidence: [★★★★★] | Units: [X]');
-  lines.push('');
-  lines.push('ANALYSIS:');
-  lines.push('- [Key supporting factors with dates/sources]');
-  lines.push('- [Matchup advantages]');
-  lines.push('- [Recent trends]');
-  lines.push('- [Situational factors]');
-  lines.push('');
-  lines.push('RISKS:');
-  lines.push('- [Potential concerns]');
-  lines.push('- [What could go wrong]');
-  lines.push('');
-  lines.push('VALUE RATIONALE:');
-  lines.push('- Why this bet has positive expected value');
-  lines.push('- Comparison to other sportsbooks');
-  lines.push('- Market context');
-  lines.push('');
+  // Enhanced recommendation format (omit when strict JSON is requested to avoid conflicting instructions)
+  if (outputFormat !== 'json') {
+    lines.push('RECOMMENDATION FORMAT:');
+    lines.push('For each bet, provide in this structure:');
+    lines.push('');
+    lines.push('[BET TYPE] - [TEAM/PLAYER] - [LINE] @ [SPORTSBOOK]');
+    lines.push('Odds: [ODDS] | Implied Probability: [%] | True Probability: [%] | EV: [+/-$X.XX]');
+    lines.push('Confidence: [★★★★★] | Units: [X]');
+    lines.push('');
+    lines.push('ANALYSIS:');
+    lines.push('- [Key supporting factors with dates/sources]');
+    lines.push('- [Matchup advantages]');
+    lines.push('- [Recent trends]');
+    lines.push('- [Situational factors]');
+    lines.push('');
+    lines.push('RISKS:');
+    lines.push('- [Potential concerns]');
+    lines.push('- [What could go wrong]');
+    lines.push('');
+    lines.push('VALUE RATIONALE:');
+    lines.push('- Why this bet has positive expected value');
+    lines.push('- Comparison to other sportsbooks');
+    lines.push('- Market context');
+    lines.push('');
+  }
 
   // Add evidence requirements
   lines.push('EVIDENCE REQUIREMENTS:');
   lines.push('For each recommendation, provide:');
-  lines.push('- The specific current facts supporting your pick (with dates when available)');
+  if (requireCitations) {
+    lines.push('- The specific current facts supporting your pick (with timestamps) AND cite sources (name + link)');
+  } else {
+    lines.push('- The specific current facts supporting your pick (with dates when available)');
+  }
   lines.push('- Any concerning factors or risks you identified');
   lines.push('- Confidence rating justified by the evidence, not assumptions');
   lines.push('- Expected value calculation showing why it\'s a value bet');
   lines.push('');
+
+  if (outputFormat === 'json') {
+    lines.push('OUTPUT FORMAT (STRICT JSON):');
+    lines.push('Return ONLY valid JSON. No markdown, no code fences, no extra commentary.');
+    lines.push('Schema:');
+    lines.push('{');
+    lines.push('  "generatedAt": "ISO-8601 timestamp",');
+    lines.push('  "assumptions": ["any explicit assumptions you had to make"],');
+    lines.push('  "picks": [');
+    lines.push('    {');
+    lines.push('      "sport": "string",');
+    lines.push('      "matchup": "string",');
+    lines.push('      "betType": "moneyline|spread|total|player_prop|parlay|sgpx|alternate",');
+    lines.push('      "selection": "string",');
+    lines.push('      "line": "string|null",');
+    lines.push('      "sportsbook": "string",');
+    lines.push('      "oddsAmerican": "number|null",');
+    lines.push('      "impliedProbabilityPct": "number|null",');
+    lines.push('      "trueProbabilityPct": "number",');
+    lines.push('      "expectedValuePer100": "number|null",');
+    lines.push('      "confidenceStars": "integer(1-5)",');
+    lines.push('      "units": "number",');
+    lines.push('      "keyEvidence": [');
+    lines.push('        { "fact": "string", "asOf": "string", "source": { "name": "string", "url": "string" } }');
+    lines.push('      ],');
+    lines.push('      "risks": ["string"],');
+    lines.push('      "bestLineComparison": ["string"]');
+    lines.push('    }');
+    lines.push('  ]');
+    lines.push('}');
+    lines.push('');
+  }
 
   lines.push('Note: For sportsbooks without listed odds, please research current lines and include in analysis.');
 
@@ -687,7 +773,9 @@ function formatPoint(point) {
 }
 
 function formatCommenceTime(isoString) {
+  if (!isoString) return 'TBD';
   const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return 'TBD';
   return date.toLocaleString('en-US', {
     timeZone: 'America/New_York',
     month: 'short',
@@ -728,5 +816,13 @@ function formatPlayerPropType(marketKey) {
 module.exports = {
   generatePrompt
 };
+
+function clampInt(value, min, max, fallback) {
+  const n = Number.parseInt(value, 10);
+  if (Number.isNaN(n)) return fallback;
+  if (n < min) return min;
+  if (n > max) return max;
+  return n;
+}
 
 

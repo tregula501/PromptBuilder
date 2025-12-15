@@ -5,6 +5,105 @@
     </div>
 
     <div class="selector-body">
+      <!-- Prompt Options -->
+      <div class="setting-group">
+        <label class="setting-label">Prompt Mode</label>
+        <div class="radio-group">
+          <label class="radio-item">
+            <input
+              type="radio"
+              value="standard"
+              :checked="modelValue.promptMode === 'standard'"
+              @change="updateSetting('promptMode', 'standard')"
+            />
+            <span>Standard</span>
+          </label>
+          <label class="radio-item">
+            <input
+              type="radio"
+              value="compact"
+              :checked="modelValue.promptMode === 'compact'"
+              @change="updateSetting('promptMode', 'compact')"
+            />
+            <span>Compact</span>
+          </label>
+        </div>
+        <div class="setting-hint">
+          Compact removes long examples/frameworks to keep the prompt shorter.
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label">LLM Output Format</label>
+        <div class="radio-group">
+          <label class="radio-item">
+            <input
+              type="radio"
+              value="markdown"
+              :checked="modelValue.outputFormat === 'markdown'"
+              @change="updateSetting('outputFormat', 'markdown')"
+            />
+            <span>Markdown/Text</span>
+          </label>
+          <label class="radio-item">
+            <input
+              type="radio"
+              value="json"
+              :checked="modelValue.outputFormat === 'json'"
+              @change="updateSetting('outputFormat', 'json')"
+            />
+            <span>Strict JSON</span>
+          </label>
+        </div>
+        <div class="setting-hint">
+          JSON is best if you want consistent, parseable results from the LLM.
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label class="checkbox-item">
+          <input
+            type="checkbox"
+            :checked="modelValue.requireCitations !== false"
+            @change="updateSetting('requireCitations', $event.target.checked)"
+          />
+          <span>Require sources (links + timestamps)</span>
+        </label>
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label">
+          Recent Form Window: last {{ modelValue.lookbackGames || 10 }} games
+        </label>
+        <div class="range-row single">
+          <input
+            type="range"
+            min="3"
+            max="20"
+            :value="modelValue.lookbackGames || 10"
+            @input="updateSetting('lookbackGames', parseInt($event.target.value))"
+          />
+          <span class="range-value">{{ modelValue.lookbackGames || 10 }}</span>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label">
+          Injury/Lineup Freshness: {{ modelValue.injuryFreshnessHours || 24 }} hours
+        </label>
+        <div class="range-row single">
+          <input
+            type="range"
+            min="6"
+            max="168"
+            step="6"
+            :value="modelValue.injuryFreshnessHours || 24"
+            @input="updateSetting('injuryFreshnessHours', parseInt($event.target.value))"
+          />
+          <span class="range-value">{{ modelValue.injuryFreshnessHours || 24 }}</span>
+        </div>
+      </div>
+
       <!-- Bet Style -->
       <div class="setting-group">
         <label class="setting-label">Bet Style</label>
@@ -172,7 +271,12 @@ const props = defineProps({
       maxOdds: 500,
       excludePlayerProps: false,
       riskLevel: 'average',
-      recommendationCount: 3
+      recommendationCount: 3,
+      promptMode: 'standard',
+      outputFormat: 'markdown',
+      requireCitations: true,
+      lookbackGames: 10,
+      injuryFreshnessHours: 24
     })
   }
 })
@@ -239,6 +343,13 @@ function formatOdds(odds) {
   color: var(--text-secondary);
   margin-bottom: 8px;
   font-weight: 500;
+}
+
+.setting-hint {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  line-height: 1.3;
 }
 
 .radio-group {

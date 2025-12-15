@@ -7,9 +7,17 @@
         </button>
         <h1>Betting Prompt Builder</h1>
       </div>
-      <button @click="generatePrompt" :disabled="!canGenerate || promptLoading" class="generate-btn">
-        {{ promptLoading ? 'Generating...' : 'Generate Prompt' }}
-      </button>
+      <div class="header-right">
+        <div v-if="apiUsage?.requestsRemaining !== null && apiUsage?.requestsRemaining !== undefined" class="api-usage">
+          API remaining: <strong>{{ apiUsage.requestsRemaining }}</strong>
+        </div>
+        <button @click="copyShareLink" class="secondary-btn">
+          Copy Share Link
+        </button>
+        <button @click="generatePrompt" :disabled="!canGenerate || promptLoading" class="generate-btn">
+          {{ promptLoading ? 'Generating...' : 'Generate Prompt' }}
+        </button>
+      </div>
     </header>
 
     <main class="app-main">
@@ -55,7 +63,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import SportSelector from './components/SportSelector.vue'
 import SportsbookSelector from './components/SportsbookSelector.vue'
 import BetTypeSelector from './components/BetTypeSelector.vue'
@@ -79,7 +87,12 @@ const parlaySettings = ref({
   maxOdds: 500,
   excludePlayerProps: false,
   riskLevel: 'average',
-  recommendationCount: 3
+  recommendationCount: 3,
+  promptMode: 'standard', // 'standard' | 'compact'
+  outputFormat: 'markdown', // 'markdown' | 'json'
+  requireCitations: true,
+  lookbackGames: 10,
+  injuryFreshnessHours: 24
 })
 
 const fetchedGames = ref([])
@@ -96,7 +109,7 @@ const generatedPrompt = ref('')
 const promptLoading = ref(false)
 const promptError = ref(null)
 
-const { fetchGames: fetchGamesForSport, generatePrompt: generatePromptApi } = useOddsApi()
+const { apiUsage, fetchGames: fetchGamesForSport, generatePrompt: generatePromptApi } = useOddsApi()
 
 const canGenerate = computed(() => {
   return selectedGames.value.length > 0 &&
@@ -209,12 +222,104 @@ function handleKeydown(e) {
 }
 
 onMounted(() => {
+  // Restore settings (share-link overrides localStorage)
+  try {
+    const url = new URL(window.location.href)
+    const shared = url.searchParams.get('state')
+    const restored = shared ? decodeState(shared) : null
+
+    if (restored) {
+      if (Array.isArray(restored?.sports)) selectedSports.value = restored.sports
+      if (Array.isArray(restored?.books)) selectedSportsbooks.value = restored.books
+      if (Array.isArray(restored?.types)) selectedBetTypes.value = restored.types
+      if (restored?.settings && typeof restored.settings === 'object') {
+        parlaySettings.value = { ...parlaySettings.value, ...restored.settings }
+      }
+    } else {
+      const saved = localStorage.getItem('betting-prompt-settings')
+      if (saved) {
+        const state = JSON.parse(saved)
+        if (Array.isArray(state?.sports)) selectedSports.value = state.sports
+        if (Array.isArray(state?.books)) selectedSportsbooks.value = state.books
+        if (Array.isArray(state?.types)) selectedBetTypes.value = state.types
+        if (state?.settings && typeof state.settings === 'object') {
+          parlaySettings.value = { ...parlaySettings.value, ...state.settings }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to restore settings:', err)
+  }
+
   window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
+
+// Persist settings (not games, to avoid large localStorage payloads)
+watch(
+  [selectedSports, selectedSportsbooks, selectedBetTypes, parlaySettings],
+  ([sports, books, types, settings]) => {
+    try {
+      localStorage.setItem('betting-prompt-settings', JSON.stringify({
+        sports,
+        books,
+        types,
+        settings,
+        timestamp: Date.now()
+      }))
+    } catch (err) {
+      console.warn('Failed to save settings:', err)
+    }
+  },
+  { deep: true }
+)
+
+function buildShareUrl() {
+  const url = new URL(window.location.href)
+  url.searchParams.set('state', encodeState({
+    sports: selectedSports.value,
+    books: selectedSportsbooks.value,
+    types: selectedBetTypes.value,
+    settings: parlaySettings.value
+  }))
+  return url.toString()
+}
+
+async function copyShareLink() {
+  const url = buildShareUrl()
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = url
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+  } catch (err) {
+    console.error('Failed to copy share link:', err)
+  }
+}
+
+function encodeState(obj) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(obj))))
+}
+
+function decodeState(encoded) {
+  try {
+    const json = decodeURIComponent(escape(atob(encoded)))
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
 </script>
 
 <style>
@@ -268,6 +373,26 @@ body {
   padding: 12px 24px;
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border-light);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.api-usage {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.02);
+}
+
+.api-usage strong {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .app-header h1 {
@@ -330,6 +455,23 @@ body {
 .generate-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.secondary-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.secondary-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .header-left {
