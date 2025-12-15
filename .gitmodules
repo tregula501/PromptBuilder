@@ -1,0 +1,4 @@
+[submodule "mediahub"]
+	path = mediahub
+	url = https://github.com/tregula501/mediahub.git
+
