@@ -7,8 +7,8 @@
         <button @click="$emit('fetch')" :disabled="!canFetch || fetchLoading" class="fetch-btn">
           {{ fetchLoading ? 'Loading...' : 'Fetch Games' }}
         </button>
-        <button v-if="games.length" @click="selectAll" class="select-all-btn">
-          {{ allSelected ? 'Clear All' : 'Select All' }}
+        <button v-if="visibleGames.length" @click="selectAllVisible" class="select-all-btn">
+          {{ allSelected ? 'Clear Visible' : 'Select Visible' }}
         </button>
       </div>
     </div>
@@ -49,35 +49,104 @@
       </div>
 
       <div v-else class="game-list">
-        <label
-          v-for="game in games"
-          :key="game.id"
-          class="game-item"
-          :class="{ selected: modelValue.some(g => g.id === game.id) }"
-        >
+        <div class="filters">
           <input
-            type="checkbox"
-            :checked="modelValue.some(g => g.id === game.id)"
-            @change="toggleGame(game)"
+            v-model="query"
+            class="search"
+            type="text"
+            placeholder="Search teams or sport…"
+            aria-label="Search games"
           />
-          <div class="game-info">
-            <div class="teams">
-              <span class="away">{{ game.awayTeam }}</span>
-              <span class="at">@</span>
-              <span class="home">{{ game.homeTeam }}</span>
+          <label class="toggle">
+            <input type="checkbox" v-model="groupBySport" />
+            <span>Group by sport</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" v-model="onlyWithOdds" />
+            <span>Only with odds</span>
+          </label>
+        </div>
+
+        <div v-if="!visibleGames.length" class="state-message compact">
+          <span>No matches</span>
+          <small>Try clearing filters/search.</small>
+        </div>
+
+        <template v-else-if="groupBySport">
+          <div v-for="group in groupedVisibleGames" :key="group.key" class="group">
+            <div class="group-row">
+              <div class="group-left">
+                <span class="group-title">{{ group.title }}</span>
+                <span class="group-count">{{ group.games.length }} games</span>
+              </div>
+              <button class="select-all-btn" type="button" @click="toggleSelectSport(group.key, group.games)">
+                {{ isSportFullySelected(group.games) ? 'Clear' : 'Select' }}
+              </button>
             </div>
-            <div class="meta">
-              <span class="sport">{{ game.sportTitle }}</span>
-              <span class="time">{{ formatTime(game.commenceTime) }}</span>
+
+            <label
+              v-for="game in group.games"
+              :key="game.id"
+              class="game-item"
+              :class="{ selected: isSelected(game) }"
+            >
+              <input
+                type="checkbox"
+                :checked="isSelected(game)"
+                @change="toggleGame(game)"
+              />
+              <div class="game-info">
+                <div class="teams">
+                  <span class="away">{{ game.awayTeam }}</span>
+                  <span class="at">@</span>
+                  <span class="home">{{ game.homeTeam }}</span>
+                </div>
+                <div class="meta">
+                  <span class="sport">{{ game.sportTitle }}</span>
+                  <span class="time">{{ formatTime(game.commenceTime) }}</span>
+                </div>
+              </div>
+              <div class="odds-info">
+                <span v-if="game.bookmakers?.length" class="has-odds">
+                  {{ game.bookmakers.length }} books
+                </span>
+                <span v-else class="no-odds">No odds</span>
+              </div>
+            </label>
+          </div>
+        </template>
+
+        <template v-else>
+          <label
+            v-for="game in visibleGames"
+            :key="game.id"
+            class="game-item"
+            :class="{ selected: isSelected(game) }"
+          >
+            <input
+              type="checkbox"
+              :checked="isSelected(game)"
+              @change="toggleGame(game)"
+            />
+            <div class="game-info">
+              <div class="teams">
+                <span class="away">{{ game.awayTeam }}</span>
+                <span class="at">@</span>
+                <span class="home">{{ game.homeTeam }}</span>
+              </div>
+              <div class="meta">
+                <span class="sport">{{ game.sportTitle }}</span>
+                <span class="time">{{ formatTime(game.commenceTime) }}</span>
+              </div>
             </div>
-          </div>
-          <div class="odds-info">
-            <span v-if="game.bookmakers?.length" class="has-odds">
-              {{ game.bookmakers.length }} books
-            </span>
-            <span v-else class="no-odds">No odds</span>
-          </div>
-        </label>
+            <div class="odds-info">
+              <span v-if="game.bookmakers?.length" class="has-odds">
+                {{ game.bookmakers.length }} books
+              </span>
+              <span v-else class="no-odds">No odds</span>
+            </div>
+          </label>
+        </template>
       </div>
     </div>
   </div>
@@ -99,8 +168,33 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'retry', 'fetch', 'add-manual-game'])
 
+const query = ref('')
+const groupBySport = ref(true)
+const onlyWithOdds = ref(false)
+
+const visibleGames = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  return (props.games || []).filter(g => {
+    if (onlyWithOdds.value && !(g.bookmakers?.length)) return false
+    if (!q) return true
+    const hay = `${g.awayTeam || ''} ${g.homeTeam || ''} ${g.sportTitle || ''}`.toLowerCase()
+    return hay.includes(q)
+  })
+})
+
+const groupedVisibleGames = computed(() => {
+  const map = new Map()
+  for (const g of visibleGames.value) {
+    const key = g.sportKey || g.sportTitle || 'unknown'
+    const title = g.sportTitle || key
+    if (!map.has(key)) map.set(key, { key, title, games: [] })
+    map.get(key).games.push(g)
+  }
+  return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title))
+})
+
 const allSelected = computed(() => {
-  return props.games.length > 0 && props.games.every(g => props.modelValue.some(sg => sg.id === g.id))
+  return visibleGames.value.length > 0 && visibleGames.value.every(g => props.modelValue.some(sg => sg.id === g.id))
 })
 
 const manualSports = computed(() => {
@@ -149,15 +243,49 @@ function addManual() {
 }
 
 function toggleGame(game) {
-  const isSelected = props.modelValue.some(g => g.id === game.id)
-  const newValue = isSelected
+  const selected = isSelected(game)
+  const newValue = selected
     ? props.modelValue.filter(g => g.id !== game.id)
     : [...props.modelValue, game]
   emit('update:modelValue', newValue)
 }
 
-function selectAll() {
-  emit('update:modelValue', allSelected.value ? [] : [...props.games])
+function isSelected(game) {
+  return props.modelValue.some(g => g.id === game.id)
+}
+
+function selectAllVisible() {
+  if (!visibleGames.value.length) return
+  if (allSelected.value) {
+    // Clear only visible ones; keep selections outside the filter/search
+    const visibleIds = new Set(visibleGames.value.map(g => g.id))
+    emit('update:modelValue', props.modelValue.filter(g => !visibleIds.has(g.id)))
+    return
+  }
+
+  // Add visible games, de-duping by id
+  const byId = new Map(props.modelValue.map(g => [g.id, g]))
+  for (const g of visibleGames.value) byId.set(g.id, g)
+  emit('update:modelValue', Array.from(byId.values()))
+}
+
+function isSportFullySelected(games) {
+  return games.length > 0 && games.every(g => isSelected(g))
+}
+
+function toggleSelectSport(sportKey, games) {
+  if (!games?.length) return
+  const fully = isSportFullySelected(games)
+  const ids = new Set(games.map(g => g.id))
+
+  if (fully) {
+    emit('update:modelValue', props.modelValue.filter(g => !ids.has(g.id)))
+    return
+  }
+
+  const byId = new Map(props.modelValue.map(g => [g.id, g]))
+  for (const g of games) byId.set(g.id, g)
+  emit('update:modelValue', Array.from(byId.values()))
 }
 
 function formatTime(isoString) {
@@ -254,6 +382,40 @@ function formatTime(isoString) {
   padding: 16px;
 }
 
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.search {
+  flex: 1;
+  min-width: 220px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  background: rgba(255,255,255,0.01);
+}
+
+.toggle input {
+  accent-color: var(--accent);
+}
+
 .state-message {
   display: flex;
   flex-direction: column;
@@ -264,6 +426,11 @@ function formatTime(isoString) {
   color: var(--text-secondary);
   text-align: center;
   padding: 40px;
+}
+
+.state-message.compact {
+  padding: 16px;
+  height: auto;
 }
 
 .state-message.error {
@@ -351,6 +518,45 @@ function formatTime(isoString) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.group-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.group-count {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
 }
 
 .game-item {

@@ -2,60 +2,138 @@
   <div id="app">
     <header class="app-header">
       <div class="header-left">
-        <button class="hamburger-btn" @click="sidebarOpen = true">
-          <span>&#9776;</span>
-        </button>
         <h1>Betting Prompt Builder</h1>
       </div>
       <div class="header-right">
         <div v-if="apiUsage?.requestsRemaining !== null && apiUsage?.requestsRemaining !== undefined" class="api-usage">
           API remaining: <strong>{{ apiUsage.requestsRemaining }}</strong>
         </div>
+        <div class="shortcuts" title="Keyboard shortcuts">
+          Ctrl+Enter: Generate · Ctrl+C: Copy Prompt
+        </div>
         <button @click="copyShareLink" class="secondary-btn">
-          Copy Share Link
-        </button>
-        <button @click="generatePrompt" :disabled="!canGenerate || promptLoading" class="generate-btn">
-          {{ promptLoading ? 'Generating...' : 'Generate Prompt' }}
+          {{ shareCopied ? 'Link Copied' : 'Copy Share Link' }}
         </button>
       </div>
     </header>
 
     <main class="app-main">
-      <div
-        class="sidebar-backdrop"
-        :class="{ visible: sidebarOpen }"
-        @click="sidebarOpen = false"
-      ></div>
-      <aside class="sidebar" :class="{ open: sidebarOpen }">
-        <div class="sidebar-header">
-          <span>Settings</span>
-          <button class="close-btn" @click="sidebarOpen = false">&times;</button>
-        </div>
-        <SportSelector v-model="selectedSports" />
-        <SportsbookSelector v-model="selectedSportsbooks" />
-        <BetTypeSelector v-model="selectedBetTypes" :selected-sports="selectedSports" />
-        <ParlaySettings v-model="parlaySettings" />
-      </aside>
+      <section class="wizard">
+        <WizardStepper
+          :steps="wizardSteps"
+          :current-step="currentStep"
+          :completed-steps="completedSteps"
+          :unlocked-steps="unlockedSteps"
+          @go="goToStep"
+        />
 
-      <section class="content">
-        <div class="content-grid">
-          <GameSelector
-            v-model="selectedGames"
-            :games="games"
-            :loading="gamesLoading"
-            :error="gamesError"
-            :fetch-loading="gamesLoading"
-            :can-fetch="selectedSports.length > 0"
-            :selected-sports="selectedSports"
-            @retry="fetchGames"
-            @fetch="fetchGames"
-            @add-manual-game="addManualGame"
-          />
-          <PromptOutput
-            :prompt="generatedPrompt"
-            :loading="promptLoading"
-            :error="promptError"
-          />
+        <div class="wizard-step">
+          <h2 ref="stepHeadingEl" tabindex="-1" class="step-title">
+            {{ wizardSteps[currentStep - 1]?.title }}
+          </h2>
+          <p class="step-subtitle">
+            {{ wizardSteps[currentStep - 1]?.subtitle }}
+          </p>
+
+          <!-- Step 1: Configure -->
+          <div v-if="currentStep === 1" class="step-body">
+            <div class="card-grid">
+              <div class="card">
+                <SportSelector v-model="selectedSports" />
+              </div>
+              <div class="card">
+                <SportsbookSelector v-model="selectedSportsbooks" />
+              </div>
+              <div class="card">
+                <BetTypeSelector v-model="selectedBetTypes" :selected-sports="selectedSports" />
+              </div>
+            </div>
+
+            <div class="helper-row">
+              <div class="helper">
+                <strong>Tip:</strong> After picking sports/books/types, fetch games to populate the list. Manual-only sports can be entered as matchups in the next step.
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Games -->
+          <div v-else-if="currentStep === 2" class="step-body">
+            <GameSelector
+              v-model="selectedGames"
+              :games="games"
+              :loading="gamesLoading"
+              :error="gamesError"
+              :fetch-loading="gamesLoading"
+              :can-fetch="canFetchGames"
+              :selected-sports="selectedSports"
+              @retry="fetchGames"
+              @fetch="fetchGames"
+              @add-manual-game="addManualGame"
+            />
+          </div>
+
+          <!-- Step 3: Settings -->
+          <div v-else-if="currentStep === 3" class="step-body">
+            <PresetManager :current-state="currentPresetState" @apply="applyPreset" />
+            <ParlaySettings v-model="parlaySettings" />
+          </div>
+
+          <!-- Step 4: Output -->
+          <div v-else class="step-body">
+            <PromptOutput
+              :prompt="generatedPrompt"
+              :loading="promptLoading"
+              :error="promptError"
+            />
+          </div>
+        </div>
+
+        <div class="wizard-footer">
+          <div v-if="primaryDisabledReason" class="disabled-reason">
+            {{ primaryDisabledReason }}
+          </div>
+
+          <div class="footer-actions">
+            <button v-if="currentStep > 1" class="secondary-btn" @click="backStep" :disabled="promptLoading || gamesLoading">
+              Back
+            </button>
+
+            <button
+              v-if="currentStep === 1"
+              class="generate-btn"
+              @click="fetchGamesAndAdvance"
+              :disabled="!canStart || gamesLoading"
+            >
+              {{ gamesLoading ? 'Loading…' : 'Fetch Games' }}
+            </button>
+
+            <button
+              v-else-if="currentStep === 2"
+              class="generate-btn"
+              @click="nextStep"
+              :disabled="selectedGames.length === 0"
+            >
+              Continue to Settings
+            </button>
+
+            <button
+              v-else-if="currentStep === 3"
+              class="generate-btn"
+              @click="generatePrompt"
+              :disabled="!canGenerate || promptLoading"
+            >
+              {{ promptLoading ? 'Generating…' : 'Generate Prompt' }}
+            </button>
+
+            <button
+              v-else
+              class="generate-btn"
+              @click="goToStep(3)"
+              :disabled="promptLoading"
+            >
+              Back to Settings
+            </button>
+          </div>
         </div>
       </section>
     </main>
@@ -63,18 +141,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import SportSelector from './components/SportSelector.vue'
 import SportsbookSelector from './components/SportsbookSelector.vue'
 import BetTypeSelector from './components/BetTypeSelector.vue'
 import GameSelector from './components/GameSelector.vue'
 import ParlaySettings from './components/ParlaySettings.vue'
 import PromptOutput from './components/PromptOutput.vue'
+import WizardStepper from './components/WizardStepper.vue'
+import PresetManager from './components/PresetManager.vue'
 import { useOddsApi } from './composables/useOddsApi'
 import { sportsbooks as sportsbooksCatalog } from './data/sportsbooks'
 import { getSportByKey, isManualOnlySport } from './data/sports.js'
 
-const sidebarOpen = ref(false)
 const selectedSports = ref([])
 const selectedSportsbooks = ref(['fanduel', 'draftkings', 'betmgm'])
 const selectedBetTypes = ref(['h2h', 'spreads', 'totals'])
@@ -111,10 +190,27 @@ const promptError = ref(null)
 
 const { apiUsage, fetchGames: fetchGamesForSport, generatePrompt: generatePromptApi } = useOddsApi()
 
+const currentStep = ref(1)
+const stepHeadingEl = ref(null)
+const shareCopied = ref(false)
+
+const wizardSteps = [
+  { id: 1, title: 'Configure', subtitle: 'Pick sports, sportsbooks, and bet types.' },
+  { id: 2, title: 'Games', subtitle: 'Fetch/select games or add manual matchups.' },
+  { id: 3, title: 'Settings', subtitle: 'Tune prompt format, risk, odds, and research windows.' },
+  { id: 4, title: 'Output', subtitle: 'Copy and share the generated prompt.' }
+]
+
 const canGenerate = computed(() => {
   return selectedGames.value.length > 0 &&
          selectedSportsbooks.value.length > 0 &&
          selectedBetTypes.value.length > 0
+})
+
+const canStart = computed(() => {
+  return selectedSports.value.length > 0 &&
+    selectedSportsbooks.value.length > 0 &&
+    selectedBetTypes.value.length > 0
 })
 
 const apiBookmakers = computed(() => {
@@ -127,6 +223,55 @@ const apiMarkets = computed(() => {
   // Note: player props are supported in the prompt via “research if missing” until a per-sport market map is added.
   const supported = new Set(['h2h', 'spreads', 'totals'])
   return selectedBetTypes.value.filter(k => supported.has(k))
+})
+
+const selectedApiSports = computed(() => {
+  return selectedSports.value.filter(sportKey => !isManualOnlySport(sportKey))
+})
+
+const canFetchGames = computed(() => {
+  return selectedSports.value.length > 0 && selectedApiSports.value.length > 0
+})
+
+const currentPresetState = computed(() => ({
+  sports: selectedSports.value,
+  books: selectedSportsbooks.value,
+  types: selectedBetTypes.value,
+  settings: parlaySettings.value
+}))
+
+function applyPreset(state) {
+  if (!state || typeof state !== 'object') return
+  if (Array.isArray(state.sports)) selectedSports.value = [...state.sports]
+  if (Array.isArray(state.books)) selectedSportsbooks.value = [...state.books]
+  if (Array.isArray(state.types)) selectedBetTypes.value = [...state.types]
+  if (state.settings && typeof state.settings === 'object') {
+    parlaySettings.value = { ...parlaySettings.value, ...state.settings }
+  }
+}
+
+const completedSteps = computed(() => {
+  const out = []
+  if (canStart.value) out.push(1)
+  if (selectedGames.value.length > 0) out.push(2)
+  if (selectedGames.value.length > 0) out.push(3)
+  if (generatedPrompt.value) out.push(4)
+  return out
+})
+
+const unlockedSteps = computed(() => {
+  const out = [1]
+  if (canStart.value) out.push(2)
+  if (selectedGames.value.length > 0) out.push(3)
+  if (generatedPrompt.value || promptLoading.value) out.push(4)
+  return out
+})
+
+const primaryDisabledReason = computed(() => {
+  if (currentStep.value === 1 && !canStart.value) return 'Select at least one sport, sportsbook, and bet type to continue.'
+  if (currentStep.value === 2 && selectedGames.value.length === 0) return 'Select at least one game (or add a manual matchup) to continue.'
+  if (currentStep.value === 3 && !canGenerate.value) return 'Select games, sportsbooks, and bet types before generating.'
+  return ''
 })
 
 async function fetchGames() {
@@ -206,6 +351,9 @@ async function generatePrompt() {
       selectedBetTypes.value,
       parlaySettings.value
     )
+    currentStep.value = 4
+    await nextTick()
+    stepHeadingEl.value?.focus?.()
   } catch (err) {
     promptError.value = err.message
   } finally {
@@ -219,6 +367,48 @@ function handleKeydown(e) {
   if (e.ctrlKey && e.key === 'Enter' && canGenerate.value && !promptLoading.value) {
     generatePrompt()
   }
+}
+
+function goToStep(step) {
+  // Only allow jumping forward when previous steps are satisfied
+  if (step === 2 && !canStart.value) return
+  if (step === 3 && selectedGames.value.length === 0) return
+  if (step === 4 && !generatedPrompt.value && !promptLoading.value) return
+
+  currentStep.value = step
+  nextTick(() => stepHeadingEl.value?.focus?.())
+}
+
+function nextStep() {
+  if (currentStep.value === 1) {
+    if (!canStart.value) return
+    currentStep.value = 2
+  } else if (currentStep.value === 2) {
+    if (selectedGames.value.length === 0) return
+    currentStep.value = 3
+  } else if (currentStep.value === 3) {
+    // step 3 primary action is generate
+    return
+  } else {
+    return
+  }
+  nextTick(() => stepHeadingEl.value?.focus?.())
+}
+
+function backStep() {
+  if (currentStep.value <= 1) return
+  currentStep.value = Math.max(1, currentStep.value - 1)
+  nextTick(() => stepHeadingEl.value?.focus?.())
+}
+
+async function fetchGamesAndAdvance() {
+  if (!canStart.value) return
+  if (canFetchGames.value) {
+    await fetchGames()
+  }
+  currentStep.value = 2
+  await nextTick()
+  stepHeadingEl.value?.focus?.()
 }
 
 onMounted(() => {
@@ -303,6 +493,8 @@ async function copyShareLink() {
       document.execCommand('copy')
       document.body.removeChild(textarea)
     }
+    shareCopied.value = true
+    window.setTimeout(() => { shareCopied.value = false }, 1500)
   } catch (err) {
     console.error('Failed to copy share link:', err)
   }
@@ -395,6 +587,15 @@ body {
   font-weight: 600;
 }
 
+.shortcuts {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.02);
+}
+
 .app-header h1 {
   font-size: 1.125rem;
   font-weight: 600;
@@ -406,34 +607,92 @@ body {
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  justify-content: center;
 }
 
-.sidebar {
-  width: 280px;
+.wizard {
+  width: min(1100px, 100%);
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wizard-step {
   background: var(--bg-primary);
-  border-right: 1px solid var(--border-light);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.content {
-  flex: 1;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
-  padding: 24px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  background: var(--bg-secondary);
 }
 
-.content-grid {
+.step-title {
+  padding: 16px 20px 6px;
+  font-size: 1rem;
+  font-weight: 650;
+  outline: none;
+}
+
+.step-subtitle {
+  padding: 0 20px 14px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.step-body {
+  padding: 0 20px 20px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.card-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  flex: 1;
-  min-height: 0;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.card {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  background: rgba(255,255,255,0.01);
+}
+
+.helper-row {
+  margin-top: 14px;
+}
+
+.helper {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 12px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: rgba(20, 184, 166, 0.06);
+}
+
+.wizard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px 0;
+}
+
+.disabled-reason {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.footer-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .generate-btn {
@@ -474,113 +733,15 @@ body {
   color: var(--text-primary);
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.hamburger-btn {
-  display: none;
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: 4px 8px;
-}
-
-.sidebar-header {
-  display: none;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid var(--border-light);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
-  line-height: 1;
-}
-
-.close-btn:hover {
-  color: var(--text-primary);
-}
-
-.sidebar-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 90;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.sidebar-backdrop.visible {
-  opacity: 1;
-}
-
 @media (max-width: 1200px) {
-  .content-grid {
+  .card-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .hamburger-btn {
-    display: block;
-  }
-
-  .sidebar-header {
-    display: flex;
-  }
-
-  .sidebar-backdrop {
-    display: block;
-    pointer-events: none;
-  }
-
-  .sidebar-backdrop.visible {
-    pointer-events: auto;
-  }
-
-  .sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 300px;
-    max-width: 85vw;
-    z-index: 100;
-    transform: translateX(-100%);
-    transition: transform 0.3s ease;
-    border-right: 1px solid var(--border-light);
-  }
-
-  .sidebar.open {
-    transform: translateX(0);
-  }
-
-  .app-main {
-    flex-direction: column;
-  }
-
-  .content {
-    flex: 1;
-    min-height: 0;
-  }
-
-  .content-grid {
-    grid-template-columns: 1fr;
-    overflow: auto;
+  .wizard {
+    padding: 14px 14px 18px;
   }
 }
 </style>

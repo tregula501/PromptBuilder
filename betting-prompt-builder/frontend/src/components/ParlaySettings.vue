@@ -5,256 +5,273 @@
     </div>
 
     <div class="selector-body">
-      <!-- Prompt Options -->
-      <div class="setting-group">
-        <label class="setting-label">Prompt Mode</label>
-        <div class="radio-group">
-          <label class="radio-item">
-            <input
-              type="radio"
-              value="standard"
-              :checked="modelValue.promptMode === 'standard'"
-              @change="updateSetting('promptMode', 'standard')"
-            />
-            <span>Standard</span>
-          </label>
-          <label class="radio-item">
-            <input
-              type="radio"
-              value="compact"
-              :checked="modelValue.promptMode === 'compact'"
-              @change="updateSetting('promptMode', 'compact')"
-            />
-            <span>Compact</span>
-          </label>
-        </div>
-        <div class="setting-hint">
-          Compact removes long examples/frameworks to keep the prompt shorter.
-        </div>
-      </div>
+      <!-- Prompt format -->
+      <details class="section" open>
+        <summary class="section-title">Prompt format</summary>
 
-      <div class="setting-group">
-        <label class="setting-label">LLM Output Format</label>
-        <div class="radio-group">
-          <label class="radio-item">
-            <input
-              type="radio"
-              value="markdown"
-              :checked="modelValue.outputFormat === 'markdown'"
-              @change="updateSetting('outputFormat', 'markdown')"
-            />
-            <span>Markdown/Text</span>
-          </label>
-          <label class="radio-item">
-            <input
-              type="radio"
-              value="json"
-              :checked="modelValue.outputFormat === 'json'"
-              @change="updateSetting('outputFormat', 'json')"
-            />
-            <span>Strict JSON</span>
-          </label>
+        <div class="setting-group">
+          <label class="setting-label">Prompt Mode</label>
+          <div class="radio-group">
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="standard"
+                :checked="modelValue.promptMode === 'standard'"
+                @change="updateSetting('promptMode', 'standard')"
+              />
+              <span>Standard</span>
+            </label>
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="compact"
+                :checked="modelValue.promptMode === 'compact'"
+                @change="updateSetting('promptMode', 'compact')"
+              />
+              <span>Compact</span>
+            </label>
+          </div>
+          <div class="setting-hint">
+            Compact removes long examples/frameworks to keep the prompt shorter.
+          </div>
         </div>
-        <div class="setting-hint">
-          JSON is best if you want consistent, parseable results from the LLM.
+
+        <div class="setting-group">
+          <label class="setting-label">LLM Output Format</label>
+          <div class="radio-group">
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="markdown"
+                :checked="modelValue.outputFormat === 'markdown'"
+                @change="updateSetting('outputFormat', 'markdown')"
+              />
+              <span>Markdown/Text</span>
+            </label>
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="json"
+                :checked="modelValue.outputFormat === 'json'"
+                @change="updateSetting('outputFormat', 'json')"
+              />
+              <span>Strict JSON</span>
+            </label>
+          </div>
+          <div class="setting-hint">
+            JSON is best if you want consistent, parseable results from the LLM.
+          </div>
         </div>
-      </div>
 
-      <div class="setting-group">
-        <label class="checkbox-item">
-          <input
-            type="checkbox"
-            :checked="modelValue.requireCitations !== false"
-            @change="updateSetting('requireCitations', $event.target.checked)"
-          />
-          <span>Require sources (links + timestamps)</span>
-        </label>
-      </div>
-
-      <div class="setting-group">
-        <label class="setting-label">
-          Recent Form Window: last {{ modelValue.lookbackGames || 10 }} games
-        </label>
-        <div class="range-row single">
-          <input
-            type="range"
-            min="3"
-            max="20"
-            :value="modelValue.lookbackGames || 10"
-            @input="updateSetting('lookbackGames', parseInt($event.target.value))"
-          />
-          <span class="range-value">{{ modelValue.lookbackGames || 10 }}</span>
-        </div>
-      </div>
-
-      <div class="setting-group">
-        <label class="setting-label">
-          Injury/Lineup Freshness: {{ modelValue.injuryFreshnessHours || 24 }} hours
-        </label>
-        <div class="range-row single">
-          <input
-            type="range"
-            min="6"
-            max="168"
-            step="6"
-            :value="modelValue.injuryFreshnessHours || 24"
-            @input="updateSetting('injuryFreshnessHours', parseInt($event.target.value))"
-          />
-          <span class="range-value">{{ modelValue.injuryFreshnessHours || 24 }}</span>
-        </div>
-      </div>
-
-      <!-- Bet Style -->
-      <div class="setting-group">
-        <label class="setting-label">Bet Style</label>
-        <div class="radio-group">
-          <label class="radio-item">
+        <div class="setting-group">
+          <label class="checkbox-item">
             <input
-              type="radio"
-              value="Straight"
-              :checked="modelValue.betStyle === 'Straight'"
-              @change="updateSetting('betStyle', 'Straight')"
+              type="checkbox"
+              :checked="modelValue.requireCitations !== false"
+              @change="updateSetting('requireCitations', $event.target.checked)"
             />
-            <span>Straight Bets</span>
+            <span>Require sources (links + timestamps)</span>
           </label>
-          <label class="radio-item">
-            <input
-              type="radio"
-              value="Parlay"
-              :checked="modelValue.betStyle === 'Parlay'"
-              @change="updateSetting('betStyle', 'Parlay')"
-            />
-            <span>Include Parlays</span>
-          </label>
+          <div class="setting-hint">
+            Recommended if you’ll act on the output; keeps the model honest.
+          </div>
         </div>
-      </div>
+      </details>
 
-      <!-- Risk Level -->
-      <div class="setting-group">
-        <label class="setting-label">Risk Level</label>
-        <div class="radio-group vertical">
-          <label class="radio-item">
-            <input
-              type="radio"
-              value="conservative"
-              :checked="modelValue.riskLevel === 'conservative'"
-              @change="updateSetting('riskLevel', 'conservative')"
-            />
-            <span>Conservative</span>
-          </label>
-          <label class="radio-item">
-            <input
-              type="radio"
-              value="average"
-              :checked="modelValue.riskLevel === 'average'"
-              @change="updateSetting('riskLevel', 'average')"
-            />
-            <span>Average</span>
-          </label>
-          <label class="radio-item">
-            <input
-              type="radio"
-              value="aggressive"
-              :checked="modelValue.riskLevel === 'aggressive'"
-              @change="updateSetting('riskLevel', 'aggressive')"
-            />
-            <span>Aggressive</span>
-          </label>
+      <!-- Betting preferences -->
+      <details class="section" open>
+        <summary class="section-title">Betting preferences</summary>
+
+        <div class="setting-group">
+          <label class="setting-label">Bet Style</label>
+          <div class="radio-group">
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="Straight"
+                :checked="modelValue.betStyle === 'Straight'"
+                @change="updateSetting('betStyle', 'Straight')"
+              />
+              <span>Straight Bets</span>
+            </label>
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="Parlay"
+                :checked="modelValue.betStyle === 'Parlay'"
+                @change="updateSetting('betStyle', 'Parlay')"
+              />
+              <span>Include Parlays</span>
+            </label>
+          </div>
         </div>
-      </div>
 
-      <!-- Recommendation Count -->
-      <div class="setting-group">
-        <label class="setting-label">
-          Recommendations: {{ modelValue.recommendationCount }}
-        </label>
-        <div class="range-row single">
-          <input
-            type="range"
-            min="1"
-            max="10"
-            :value="modelValue.recommendationCount"
-            @input="updateSetting('recommendationCount', parseInt($event.target.value))"
-          />
-          <span class="range-value">{{ modelValue.recommendationCount }}</span>
+        <div class="setting-group">
+          <label class="setting-label">Risk Level</label>
+          <div class="radio-group vertical">
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="conservative"
+                :checked="modelValue.riskLevel === 'conservative'"
+                @change="updateSetting('riskLevel', 'conservative')"
+              />
+              <span>Conservative</span>
+            </label>
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="average"
+                :checked="modelValue.riskLevel === 'average'"
+                @change="updateSetting('riskLevel', 'average')"
+              />
+              <span>Average</span>
+            </label>
+            <label class="radio-item">
+              <input
+                type="radio"
+                value="aggressive"
+                :checked="modelValue.riskLevel === 'aggressive'"
+                @change="updateSetting('riskLevel', 'aggressive')"
+              />
+              <span>Aggressive</span>
+            </label>
+          </div>
         </div>
-      </div>
 
-      <!-- Parlay Legs (only shown for Parlay mode) -->
-      <div v-if="modelValue.betStyle === 'Parlay'" class="setting-group">
-        <label class="setting-label">
-          Parlay Legs: {{ modelValue.minLegs }} - {{ modelValue.maxLegs }}
-        </label>
-        <div class="range-group">
-          <div class="range-row">
-            <span>Min</span>
+        <div class="setting-group">
+          <label class="setting-label">
+            Recommendations: {{ modelValue.recommendationCount }}
+          </label>
+          <div class="range-row single">
             <input
               type="range"
-              min="2"
+              min="1"
               max="10"
-              :value="modelValue.minLegs"
-              @input="updateSetting('minLegs', parseInt($event.target.value))"
+              :value="modelValue.recommendationCount"
+              @input="updateSetting('recommendationCount', parseInt($event.target.value))"
             />
-            <span class="range-value">{{ modelValue.minLegs }}</span>
-          </div>
-          <div class="range-row">
-            <span>Max</span>
-            <input
-              type="range"
-              min="2"
-              max="10"
-              :value="modelValue.maxLegs"
-              @input="updateSetting('maxLegs', parseInt($event.target.value))"
-            />
-            <span class="range-value">{{ modelValue.maxLegs }}</span>
+            <span class="range-value">{{ modelValue.recommendationCount }}</span>
           </div>
         </div>
-      </div>
 
-      <!-- Odds Range -->
-      <div class="setting-group">
-        <label class="setting-label">
-          Odds Range: {{ formatOdds(modelValue.minOdds) }} to {{ formatOdds(modelValue.maxOdds) }}
-        </label>
-        <div class="range-group">
-          <div class="range-row">
-            <span>Min</span>
-            <input
-              type="range"
-              min="-400"
-              max="500"
-              step="25"
-              :value="modelValue.minOdds"
-              @input="updateSetting('minOdds', parseInt($event.target.value))"
-            />
-            <span class="range-value">{{ formatOdds(modelValue.minOdds) }}</span>
-          </div>
-          <div class="range-row">
-            <span>Max</span>
-            <input
-              type="range"
-              min="-200"
-              max="2000"
-              step="50"
-              :value="modelValue.maxOdds"
-              @input="updateSetting('maxOdds', parseInt($event.target.value))"
-            />
-            <span class="range-value">{{ formatOdds(modelValue.maxOdds) }}</span>
+        <div v-if="modelValue.betStyle === 'Parlay'" class="setting-group">
+          <label class="setting-label">
+            Parlay Legs: {{ modelValue.minLegs }} - {{ modelValue.maxLegs }}
+          </label>
+          <div class="range-group">
+            <div class="range-row">
+              <span>Min</span>
+              <input
+                type="range"
+                min="2"
+                max="10"
+                :value="modelValue.minLegs"
+                @input="updateSetting('minLegs', parseInt($event.target.value))"
+              />
+              <span class="range-value">{{ modelValue.minLegs }}</span>
+            </div>
+            <div class="range-row">
+              <span>Max</span>
+              <input
+                type="range"
+                min="2"
+                max="10"
+                :value="modelValue.maxLegs"
+                @input="updateSetting('maxLegs', parseInt($event.target.value))"
+              />
+              <span class="range-value">{{ modelValue.maxLegs }}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Exclude Player Props -->
-      <div class="setting-group">
-        <label class="checkbox-item">
-          <input
-            type="checkbox"
-            :checked="modelValue.excludePlayerProps"
-            @change="updateSetting('excludePlayerProps', $event.target.checked)"
-          />
-          <span>Exclude Player Props</span>
-        </label>
-      </div>
+        <div class="setting-group">
+          <label class="setting-label">
+            Odds Range: {{ formatOdds(modelValue.minOdds) }} to {{ formatOdds(modelValue.maxOdds) }}
+          </label>
+          <div class="range-group">
+            <div class="range-row">
+              <span>Min</span>
+              <input
+                type="range"
+                min="-400"
+                max="500"
+                step="25"
+                :value="modelValue.minOdds"
+                @input="updateSetting('minOdds', parseInt($event.target.value))"
+              />
+              <span class="range-value">{{ formatOdds(modelValue.minOdds) }}</span>
+            </div>
+            <div class="range-row">
+              <span>Max</span>
+              <input
+                type="range"
+                min="-200"
+                max="2000"
+                step="50"
+                :value="modelValue.maxOdds"
+                @input="updateSetting('maxOdds', parseInt($event.target.value))"
+              />
+              <span class="range-value">{{ formatOdds(modelValue.maxOdds) }}</span>
+            </div>
+          </div>
+          <div class="setting-hint">
+            Use tighter ranges for cleaner outputs. Wider ranges increase research variance.
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <label class="checkbox-item">
+            <input
+              type="checkbox"
+              :checked="modelValue.excludePlayerProps"
+              @change="updateSetting('excludePlayerProps', $event.target.checked)"
+            />
+            <span>Exclude Player Props</span>
+          </label>
+        </div>
+      </details>
+
+      <!-- Research windows -->
+      <details class="section">
+        <summary class="section-title">Research windows</summary>
+
+        <div class="setting-group">
+          <label class="setting-label">
+            Recent Form Window: last {{ modelValue.lookbackGames || 10 }} games
+          </label>
+          <div class="range-row single">
+            <input
+              type="range"
+              min="3"
+              max="20"
+              :value="modelValue.lookbackGames || 10"
+              @input="updateSetting('lookbackGames', parseInt($event.target.value))"
+            />
+            <span class="range-value">{{ modelValue.lookbackGames || 10 }}</span>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label">
+            Injury/Lineup Freshness: {{ modelValue.injuryFreshnessHours || 24 }} hours
+          </label>
+          <div class="range-row single">
+            <input
+              type="range"
+              min="6"
+              max="168"
+              step="6"
+              :value="modelValue.injuryFreshnessHours || 24"
+              @input="updateSetting('injuryFreshnessHours', parseInt($event.target.value))"
+            />
+            <span class="range-value">{{ modelValue.injuryFreshnessHours || 24 }}</span>
+          </div>
+          <div class="setting-hint">
+            Lower is stricter (more recent news required). Higher allows older sources.
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 </template>
@@ -323,6 +340,31 @@ function formatOdds(odds) {
 
 .selector-body {
   padding: 12px 16px;
+}
+
+.section {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(255,255,255,0.01);
+}
+
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+}
+
+.section[open] .section-title {
+  color: var(--accent-light);
 }
 
 .setting-group {
